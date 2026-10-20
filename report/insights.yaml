@@ -1,0 +1,46 @@
+# Hallazgos que importan al negocio, explicados sin jerga. Se editan a mano en cada evolutivo.
+# Campos: title, level (risk = riesgo, watch = vigilar, ok = resuelto o decidido, info = contexto),
+#         what (qué hemos visto), meaning (por qué importa), action (qué hacemos).
+# Se admiten cifras calculadas con llaves: {n_groups}, {n_members}, {n_turbines}, {sea_jump_pct},
+# {sea_now_mw}, {sea_before_mw}, {coverage_pct}, {days_to_league}.
+insights:
+  - title: La capacidad oficial de ENTSO-E va con retraso
+    level: ok
+    what: "La potencia instalada que publica ENTSO-E se actualiza una vez al año y va por detrás de las altas reales: en varios años la producción marina llegó a superar la capacidad declarada."
+    meaning: "Dividir la producción entre esa capacidad daría porcentajes imposibles (más del 100 %) y falsearía el entrenamiento."
+    action: "Usamos el registro oficial de aerogeneradores (MaStR), que tiene fecha de alta turbina a turbina. Con él, la producción nunca supera la potencia instalada."
+  - title: Un parque nuevo en el mar cambia las reglas
+    level: risk
+    what: "El parque Windanker entró en servicio entre agosto y septiembre de 2026 y subió la potencia marina un {sea_jump_pct} %, de {sea_before_mw} a {sea_now_mw} MW."
+    meaning: "El modelo apenas ha visto producción de ese parque: tiene muy pocas horas de historia y puede equivocarse en la parte marina."
+    action: "Calculamos el factor de capacidad con la potencia vigente cada día y vigilamos el error marino por separado en las pruebas."
+  - title: La racha de viento solo existe desde noviembre de 2024
+    level: watch
+    what: "La fuente meteorológica no incluye la racha máxima de viento antes del 13 de noviembre de 2024: son unos siete meses del histórico (abril a noviembre de 2024)."
+    meaning: "Los picos y las paradas por viento extremo son más difíciles de anticipar sin esa variable en el tramo más antiguo."
+    action: "Tratamos la racha como opcional y la sustituimos por un indicador aproximado cuando falta."
+  - title: La previsión meteorológica solo sale una vez al día
+    level: info
+    what: "Solo utilizamos la pasada de medianoche (00 UTC) del modelo europeo; la fuente no publica más pasadas útiles para nosotros."
+    meaning: "A lo largo del día no hay información meteorológica más fresca: si el tiempo cambia respecto a lo previsto, no podemos corregirlo."
+    action: "Compensamos con un rango de escenarios en lugar de un único número, y calibramos su anchura con los últimos 60 días."
+  - title: Dependemos de un tercero para la previsión
+    level: watch
+    what: "dynamical.org nos entrega la previsión ya lista, pero es un servicio externo. Si dejara de publicar un día, no tendríamos datos."
+    meaning: "Un día sin previsión sería un día sin envío a la liga."
+    action: "Guardamos nuestra propia copia y fijamos la versión del conjunto de datos. El respaldo con la fuente original del ECMWF está a medias y es una prioridad."
+  - title: La previsión del operador llega tarde para usarla
+    level: info
+    what: "El operador publica su propia previsión después del cierre de la liga, así que no podemos apoyarnos en ella."
+    meaning: "Solo sirve para compararnos con ella una vez pasado el día."
+    action: "La usamos únicamente como referencia en las pruebas: si no la mejoramos, no entramos en la liga."
+  - title: El periodo de prueba es de poco viento
+    level: watch
+    what: "El tramo reservado para evaluar al modelo (agosto a octubre de 2026) es verano y otoño, con poco viento; la liga empieza en diciembre, el mes de más viento."
+    meaning: "Un buen resultado en ese tramo no garantiza buen comportamiento en un temporal invernal."
+    action: "Entrenamos con 13 meses (incluido el invierno anterior) y, antes del 12 de noviembre, ampliamos el histórico hasta abril de 2024."
+  - title: La descarga diaria automática aún no está en marcha
+    level: risk
+    what: "El histórico de la previsión está descargado hasta el 15 de octubre de 2026, pero la descarga diaria programada y el registro de la hora real de cada publicación están pendientes."
+    meaning: "Sin ella, cada día nuevo habría que cargarlo a mano."
+    action: "Es el requisito de la primera puerta (G0): siete días seguidos sin fallos."

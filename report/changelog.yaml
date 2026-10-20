@@ -1,0 +1,50 @@
+# Novedades de cada versión del informe. Se edita a mano en cada evolutivo del proyecto:
+# añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
+# Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
+entries:
+  - version: "0.5"
+    date: 2026-10-20
+    title: La descarga automática aguanta mejor los fallos
+    items:
+      - "Si el ordenador no tiene conexión cuando toca descargar (por ejemplo, recién encendido), ahora espera hasta 10 minutos a que vuelva la red en lugar de fallar."
+      - "Si una descarga falla, se reintenta sola unas cuantas veces antes de darla por perdida y avisar."
+      - "El proveedor de precios y previsión del operador rechaza de vez en cuando una petición correcta (una o dos veces al día). Ahora se vuelve a pedir automáticamente y, si sigue fallando, queda anotado el motivo."
+      - "Estos fallos no han afectado a los datos ni a la comprobación de 7 días: llevamos 5 de 7 días seguidos sin fallos."
+  - version: "0.4"
+    date: 2026-10-16
+    title: Ya sabemos medir si el pronóstico mejora
+    items:
+      - "Capítulo nuevo, «¿Mejora el pronóstico?»: compara cada modelo con la previsión del operador, con una frase de veredicto, la tabla de cifras y la tendencia entre pruebas."
+      - "Prueba día a día: cada mes se predice sin haberlo visto, solo con lo aprendido en los meses anteriores. El periodo reservado queda aparte y se anota cada vez que se mira."
+      - "Tres referencias medidas: la media histórica por hora y mes, una curva de potencia sobre el viento previsto y el propio operador."
+      - "De momento ninguna referencia supera al operador: es lo esperado, son los puntos de partida que el modelo de verdad tendrá que batir."
+      - "La descarga diaria ya funciona sola: cada mañana espera a que se publique la previsión meteorológica, apunta a qué hora llegó y cuánto margen quedó antes del cierre (hoy, 4 h 41 min), y prepara los datos del día."
+      - "Cada hora se consulta el precio y la previsión del operador para medir a qué hora se publican de verdad."
+  - version: "0.3"
+    date: 2026-10-16
+    title: La tabla con la que aprenderá el modelo
+    items:
+      - "Ya existe la tabla de entrenamiento: una fila por cuarto de hora del día siguiente, 410 días, con el viento previsto en cada grupo de parques y la producción real que hubo."
+      - "Cada dato lleva la hora a la que lo habríamos tenido de verdad. La previsión meteorológica llega hacia las 8:30 UTC, con al menos cuatro horas y media de margen antes del cierre."
+      - "Una prueba automática impide usar información posterior al cierre, la producción real o la previsión del operador como pistas."
+      - "Los días del cambio de hora salen con su número real de cuartos de hora: 92 en marzo y 100 en octubre."
+      - "El precio del mercado queda fuera de momento: aún no hemos medido a qué hora se publica."
+  - version: "0.2"
+    date: 2026-10-16
+    title: La previsión meteorológica por dentro
+    items:
+      - "Capítulo nuevo, «La previsión meteorológica, por dentro»: qué campos usamos y por qué, la malla de la zona con un día real, los plazos de cada pasada, los 51 escenarios y el viento previsto frente a la producción real."
+      - "Los mapas se dibujan ahora con una proyección que conserva las proporciones: Alemania ya no sale achatada y las celdas de la rejilla se ven más altas que anchas, como en la realidad."
+      - "El mapamundi se rehace con el recorrido numerado de cada fuente y un recuadro ampliado de Europa occidental; el servidor de almacenamiento está en Bilbao."
+      - "Los nombres de los estados se colocan en huecos libres, sin tapar los grupos de parques."
+  - version: "0.1"
+    date: 2026-10-16
+    title: Los datos ya están en casa y comprobados
+    items:
+      - "Comprobamos la fuente meteorológica (etapa 0): variables disponibles, cobertura desde abril de 2024 y la hora a la que publica cada día."
+      - "Probamos la cadena completa con una semana de datos (etapa 1) y la repetimos a los 13 meses de histórico (etapa 2): todas las previsiones descargadas, guardadas y resumidas."
+      - "Validación automática de la previsión meteorológica: cada día guardado supera los controles de rango, vacíos y estructura."
+      - "Producción eólica real, precios y previsión del operador desde 2015, descargados de ENTSO-E y reconstruidos sin huecos."
+      - "Registro oficial de aerogeneradores (MaStR): cada turbina de la zona con su potencia, posición y fecha de alta."
+      - "Los 21 grupos de parques se calculan con las turbinas reales, y la previsión meteorológica ya se resume en esos puntos."
+      - "Primera versión de este informe."

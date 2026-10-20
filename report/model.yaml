@@ -1,0 +1,16 @@
+# Capítulo 9: qué se medirá cuando exista el modelo. Se edita a mano; las puertas (G1, G2)
+# salen del calendario de PLAN.md.
+version_label: "v0.1"
+version_date: 2026-10-29
+metrics:
+  - title: Error frente al operador
+    text: "Compararemos nuestro valor central con la previsión del operador día a día. La primera puerta exige no ser peores."
+    gl: rmse
+  - title: Error frente a las referencias sencillas
+    text: "Cuatro rivales de comparación: repetir lo de ayer, la media histórica de cada hora y mes, una curva de potencia sobre el viento previsto y el propio operador."
+  - title: Acierto del rango del 80 %
+    text: "La producción real debería caer dentro del rango previsto entre el 76 y el 84 % de los días."
+    gl: rango80
+  - title: Puntuación del rango
+    text: "Es la medida que usa la liga para los rangos: premia los estrechos que aciertan y castiga los anchos o los que fallan."
+    gl: winkler

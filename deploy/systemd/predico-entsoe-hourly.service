@@ -1,0 +1,18 @@
+[Unit]
+Description=Predico 50Hertz: precio y pronóstico del operador cada hora (F2.5)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=30min
+StartLimitBurst=4
+OnFailure=predico-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+EnvironmentFile=-%h/.config/predico/ops.env
+ExecStartPre=@REPO@/.venv/bin/python -m predico50hz.orchestration wait-online --for entsoe-hourly --timeout-s 600
+ExecStart=@REPO@/.venv/bin/python -m predico50hz.orchestration entsoe-hourly
+TimeoutStartSec=30min
+Restart=on-failure
+RestartSec=2min
+Nice=10

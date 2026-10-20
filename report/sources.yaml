@@ -1,0 +1,79 @@
+# Fuentes de datos, recorrido de los volúmenes y notas del reloj diario. Se edita a mano.
+# Las cifras de volumen, fechas y recuentos las añade el generador desde los datos reales.
+sources:
+  - id: nwp
+    name: Previsión meteorológica
+    provider: ECMWF (modelo europeo), a través de dynamical.org
+    gives: "Viento, temperatura y presión previstos para los próximos días, en 51 escenarios distintos, sobre una rejilla de 0,25° (unos 20 km)."
+    frequency: "Una vez al día, hacia las 08:20 UTC"
+    since: "1 de abril de 2024"
+    license: "CC BY 4.0 y condiciones de uso del ECMWF"
+    places: [ecmwf, dynamical, nas]
+  - id: entsoe
+    name: Producción real, precios y previsión del operador
+    provider: ENTSO-E (plataforma europea de transparencia)
+    gives: "Cuánta electricidad eólica se produjo en la zona de 50Hertz, el precio de la electricidad y la previsión del propio operador, cada cuarto de hora."
+    frequency: "Continua; descarga diaria"
+    since: "1 de enero de 2015"
+    license: "Condiciones de uso de ENTSO-E"
+    places: [entsoe, nas]
+  - id: mastr
+    name: Aerogeneradores de la zona
+    provider: Bundesnetzagentur, registro MaStR
+    gives: "Cada aerogenerador con su posición, su potencia, su altura y su fecha de alta: de aquí salen los grupos de parques y la potencia instalada día a día."
+    frequency: "Exportación completa, bajo demanda"
+    since: "Registro histórico (altas desde antes de 2015)"
+    license: "Datenlizenz Deutschland, Namensnennung 2.0 (DL-DE-BY-2.0)"
+    places: [bnetza, nas]
+places:
+  - {id: ecmwf, role: "Calcula la previsión meteorológica europea.", name: "ECMWF, Reading (Reino Unido)", lat: 51.45, lon: -0.95, kind: origin}
+  - {id: dynamical, role: "La publica ordenada en la nube y la sirve por zonas.", name: "Nube de EE. UU. (Oregón)", lat: 45.84, lon: -119.70, kind: relay}
+  - {id: entsoe, role: "Publica la producción real, los precios y la previsión del operador.", name: "ENTSO-E, Bruselas", lat: 50.85, lon: 4.35, kind: origin}
+  - {id: bnetza, role: "Publica el registro de todos los aerogeneradores.", name: "Bundesnetzagentur, Bonn", lat: 50.73, lon: 7.10, kind: origin}
+  - {id: nas, role: "Guarda la copia propia de todo lo que descargamos.", name: "Nuestro NAS, Bilbao", lat: 43.263, lon: -2.935, kind: home}
+routes:
+  - {from: ecmwf, to: dynamical, source: nwp, label: "Calcula y publica"}
+  - {from: dynamical, to: nas, source: nwp, label: "Descargamos la zona de interés"}
+  - {from: entsoe, to: nas, source: entsoe, label: "API diaria"}
+  - {from: bnetza, to: nas, source: mastr, label: "Exportación completa"}
+clock:
+  margin_required_min: 60
+  operator_note: "En las comprobaciones hechas, a las 13:20 UTC del día del cierre la previsión del operador aún no estaba publicada."
+journey:
+  columns:
+    - {key: origin, title: Origen}
+    - {key: download, title: Descargado}
+    - {key: bronze, title: Guardado tal cual}
+    - {key: silver, title: Listo para usar}
+    - {key: features, title: Variables}
+    - {key: model, title: Modelo}
+  lanes:
+    - id: nwp
+      name: Previsión meteorológica
+      steps:
+        origin: "ECMWF, vía dynamical.org: el mundo entero, quince días de previsión."
+        download: "Se lee la zona de interés de cada día directamente en la nube, sin bajar el planeta. Volumen estimado a partir de las pasadas medidas."
+        bronze: "Recortamos la zona y guardamos todos los escenarios en nuestro NAS (capa «bronce»)."
+        silver: "Nos quedamos con los {n_groups} puntos de los parques y resumimos los {n_members} escenarios en media y rango (capa «plata»)."
+    - id: entsoe
+      name: Producción, precios y operador
+      steps:
+        origin: "ENTSO-E: producción real, precio y previsión del operador."
+        download: "Respuestas de la plataforma, comprimidas, desde 2015."
+        bronze: "Se guardan tal cual llegan, con la hora de cada descarga, para detectar revisiones."
+        silver: "Serie de cada cuarto de hora sin huecos, con el origen de cada valor marcado."
+    - id: mastr
+      name: Aerogeneradores
+      steps:
+        origin: "Bundesnetzagentur: registro de todas las instalaciones de Alemania."
+        download: "La exportación completa del registro, de varios gigabytes."
+        bronze: "Se conserva el archivo original en el NAS."
+        silver: "Solo las turbinas eólicas de la zona, agrupadas en {n_groups} grupos, con su potencia día a día."
+  next:
+    features:
+      title: Variables
+      chip: Hecho
+      text: "Una tabla por cuarto de hora del día siguiente con el viento previsto en cada grupo de parques, la densidad del aire, el calendario y la producción real. Cada dato lleva la hora a la que estaría disponible, y una prueba automática falla si alguno llega después del cierre. El precio queda fuera hasta medir a qué hora se publica."
+    model:
+      title: Modelo
+      text: "Un modelo que devuelve tres valores por cuarto de hora: bajo, central y alto."

@@ -1,0 +1,48 @@
+# Términos inevitables del informe. En la plantilla se marcan con data-gl="<id>" y se muestran
+# como explicación emergente de una frase.
+terms:
+  - id: escenarios
+    term: escenarios de la previsión
+    text: "En lugar de un único pronóstico, el modelo meteorológico europeo calcula 51 versiones ligeramente distintas del tiempo. Cuanto más se parecen, más segura es la previsión."
+  - id: cuantil
+    term: cuantil
+    text: "Un valor con una probabilidad asociada: el cuantil 10 se supera nueve de cada diez veces y el cuantil 90 solo una de cada diez. Entre ambos queda el rango habitual."
+  - id: factor
+    term: factor de capacidad
+    text: "El porcentaje de la potencia instalada que se está produciendo en un momento dado: 100 % es todos los aerogeneradores a plena potencia."
+  - id: mw
+    term: MW y GW
+    text: "Megavatio y gigavatio, unidades de potencia: 1 GW son 1.000 MW. Un aerogenerador moderno en tierra ronda los 3 MW."
+  - id: bronce
+    term: bronce
+    text: "Los datos guardados tal como llegan de la fuente, sin interpretar. Si algo falla más adelante, siempre se puede volver a ellos."
+  - id: plata
+    term: plata
+    text: "Los datos ya limpios, validados y resumidos, listos para construir el modelo."
+  - id: pasada
+    term: pasada
+    text: "Cada ejecución del modelo meteorológico: la de las 00:00 UTC se calcula una vez al día y cubre los siguientes quince días."
+  - id: grupo
+    term: grupo
+    text: "Conjunto de parques cercanos que se tratan como un solo punto meteorológico, ponderado por su potencia."
+  - id: rango80
+    term: rango del 80 %
+    text: "El intervalo entre los cuantiles 10 y 90. Si está bien calibrado, la producción real cae dentro del rango ocho de cada diez veces."
+  - id: rmse
+    term: error cuadrático medio
+    text: "La medida habitual del error del valor central: penaliza más los fallos grandes que los pequeños. Cuanto menor, mejor."
+  - id: winkler
+    term: puntuación de intervalos
+    text: "Mide a la vez lo estrecho que es el rango y si contiene el valor real. Un rango muy ancho siempre acierta, pero se penaliza por inútil."
+  - id: holdout
+    term: periodo reservado
+    text: "Un tramo de fechas que el modelo no ve nunca durante el entrenamiento ni el ajuste, para evaluarlo con honestidad."
+  - id: utc
+    term: UTC
+    text: "Hora universal. En Madrid son 2 horas más en verano y 1 hora más en invierno."
+  - id: mastr
+    term: MaStR
+    text: "Marktstammdatenregister: el registro oficial alemán de instalaciones de energía, con cada aerogenerador y su fecha de alta."
+  - id: backtest
+    term: prueba día a día
+    text: "Simular el pasado como si fuera el presente: para cada mes se entrena solo con los meses anteriores y se compara lo previsto con lo que de verdad ocurrió."

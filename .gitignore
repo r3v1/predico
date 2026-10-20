@@ -1,0 +1,52 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.mypy_cache/
+.ipynb_checkpoints/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Distribución y build
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Secretos
+.env
+.env.*
+!.env.example
+
+# Datos (viven en el NAS, nunca en git)
+data/
+*.grib2
+*.grib
+*.idx
+*.zarr/
+
+# Experimentos
+mlruns/
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Informe ejecutivo generado (se regenera con `python -m predico50hz.report`)
+report/index.html
+report/*.json

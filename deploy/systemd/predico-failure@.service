@@ -1,0 +1,8 @@
+[Unit]
+Description=Predico 50Hertz: constancia del fallo de %i
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+EnvironmentFile=-%h/.config/predico/ops.env
+ExecStart=@REPO@/.venv/bin/python -m predico50hz.orchestration record-failure --unit %i

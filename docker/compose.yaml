@@ -1,0 +1,41 @@
+# Operación diaria en un host Linux cualquiera con Docker (p. ej. una VM 24/7).
+#   docker compose -f docker/compose.yaml up -d --build
+# Rutas del host por variables (o un fichero docker/.env junto a este): PREDICO_DATA_HOST,
+# PREDICO_NWP_HOST, PREDICO_ENV_FILE, PREDICO_UID/GID, PREDICO_HOST_ID. Horas y planificación:
+# el propio contenedor ejecuta `serve` (UTC; src/predico50hz/orchestration/scheduler.py).
+# El token vive solo en el fichero .env del host (permisos 600), nunca en la imagen.
+# Ojo: `docker compose config` imprime los valores de env_file; usa `config -q`.
+name: predico
+services:
+  predico-ops:
+    image: predico50hz-ops:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    # Convive con otros servicios en VMs pequeñas: CPU y memoria acotadas, prioridad baja, y
+    # ante falta de memoria el OOM killer elige antes este contenedor (un ciclo ≈ 1 GB de pico).
+    cpus: ${PREDICO_CPUS:-1.0}
+    mem_limit: ${PREDICO_MEM_LIMIT:-2g}
+    memswap_limit: ${PREDICO_MEM_LIMIT:-2g}
+    cpu_shares: 256
+    oom_score_adj: 500
+    user: "${PREDICO_UID:-1000}:${PREDICO_GID:-1000}"
+    env_file: ${PREDICO_ENV_FILE:-../.env} # ENTSOE_API_KEY=...
+    environment:
+      TZ: UTC
+      PREDICO_HOST_ID: ${PREDICO_HOST_ID:-}
+      PREDICO_NWP_BRONZE: /nwp/IFS-ENS/icechunk
+      PREDICO_DATA_DIR: /app/data
+      PREDICO_CENTROIDS: /app/config/centroids.yaml
+      PREDICO_LOCK_DIR: /app/data/ops/locks # disco local, no NFS
+      PREDICO_MISSING_IS_FAILURE: "true" # servidor 24/7: un día sin ejecución es un fallo
+    volumes:
+      - ${PREDICO_DATA_HOST:-/srv/predico/data}:/app/data
+      - ${PREDICO_NWP_HOST:-/srv/predico/nwp/IFS-ENS}:/nwp/IFS-ENS
+      - ../config:/app/config:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

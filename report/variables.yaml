@@ -1,0 +1,83 @@
+# Campos de la previsión meteorológica explicados para negocio. La lista y el orden de las
+# variables salen de `ingest/dynamical/config.py`; aquí solo está el texto de cada una.
+# Campos: id, name, unit, group (wind|air|layers|context), icon, why, derived (opcional).
+groups:
+  wind: Viento
+  air: El aire
+  layers: Capas de la atmósfera
+  context: Contexto
+variables:
+  - id: wind_speed_100m
+    name: Velocidad del viento a 100 m
+    unit: m/s
+    group: wind
+    icon: turbine
+    derived: true
+    why: "La variable principal: 100 m es la altura de las aspas. Se calcula en cada uno de los escenarios a partir de las dos componentes y es la que mueve la producción."
+  - id: wind_u_100m
+    name: Viento hacia el este, a 100 m
+    unit: m/s
+    group: wind
+    icon: arrow
+    why: "Una de las dos mitades del viento a la altura de las aspas. Con la componente norte da la fuerza y la dirección."
+  - id: wind_v_100m
+    name: Viento hacia el norte, a 100 m
+    unit: m/s
+    group: wind
+    icon: arrow
+    why: "La otra mitad del viento a 100 m. La dirección importa porque los parques se apantallan entre sí."
+  - id: wind_speed_10m
+    name: Velocidad del viento a 10 m
+    unit: m/s
+    group: wind
+    icon: windlow
+    derived: true
+    why: "El viento a pie de torre. Comparado con el de 100 m dice cuánto aumenta con la altura, y cuanto más aumenta, más energía llega a las aspas."
+  - id: wind_u_10m
+    name: Viento hacia el este, a 10 m
+    unit: m/s
+    group: wind
+    icon: arrow
+    why: "Componente este del viento cerca del suelo; sirve para calcular la velocidad a 10 m."
+  - id: wind_v_10m
+    name: Viento hacia el norte, a 10 m
+    unit: m/s
+    group: wind
+    icon: arrow
+    why: "Componente norte del viento cerca del suelo; sirve para calcular la velocidad a 10 m."
+  - id: wind_gust_10m
+    name: Racha máxima
+    unit: m/s
+    group: wind
+    icon: gust
+    why: "Los picos de viento pueden obligar a parar las turbinas por seguridad. Sirve para anticipar caídas bruscas de producción."
+  - id: temperature_2m
+    name: Temperatura del aire
+    unit: °C
+    group: air
+    icon: thermo
+    why: "El aire frío es más denso y empuja más: con el mismo viento, las aspas producen algo más en invierno."
+  - id: pressure_surface
+    name: Presión en superficie
+    unit: Pa
+    group: air
+    icon: gauge
+    why: "Junto con la temperatura da la densidad del aire. La potencia crece con la densidad y con el cubo del viento: si el viento se duplica, la potencia se multiplica por ocho."
+  - id: temperature_925hpa
+    name: Temperatura a unos 760 m
+    unit: °C
+    group: layers
+    icon: layers
+    why: "Comparada con la de superficie mide si la atmósfera está en calma y estratificada o mezclada, y por tanto cuánto del viento de altura llega al suelo."
+  - id: temperature_850hpa
+    name: Temperatura a unos 1.500 m
+    unit: °C
+    group: layers
+    icon: layers
+    why: "Segunda capa para medir la estabilidad de la atmósfera; completa la imagen de cómo se reparte el aire en vertical."
+  - id: pressure_reduced_to_mean_sea_level
+    name: Presión al nivel del mar
+    unit: Pa
+    group: context
+    icon: isobar
+    why: "Es lo que dibujan los mapas de isobaras: las diferencias de presión entre zonas empujan el viento y delatan la llegada de un frente."

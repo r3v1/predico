@@ -1,0 +1,32 @@
+# Etiquetas de lenguaje llano para lo que se lee de PLAN.md (que está redactado para el equipo
+# técnico). Las claves son el texto de la fecha del calendario y el número de etapa.
+milestones:
+  "17 oct":
+    label: Etapas 0 y 1 completadas
+    detail: "Comprobamos que la fuente meteorológica sirve y que la cadena funciona de punta a punta."
+  "22 oct":
+    label: Histórico de 13 meses y descarga diaria en marcha
+    detail: "Puerta G0: siete días seguidos de descarga diaria sin fallos."
+  "29 oct":
+    label: Primera versión del modelo (v0.1)
+    detail: "Un modelo sencillo, de punta a punta, medido contra las cuatro referencias."
+  "5 nov":
+    label: Histórico completo y primera puerta de calidad
+    detail: "Puerta G1: no ser peores que el operador y acertar el rango del 80 % entre el 76 y el 84 % de los días."
+  "12 nov":
+    label: Modelo final (v0.2)
+    detail: "Puerta G2: la mejora se confirma en un periodo que el modelo no ha visto."
+  "13–24 nov":
+    label: Construcción del sistema de producción
+    detail: "Automatizar el envío diario a la liga."
+  "25–30 nov":
+    label: Rodaje en la liga
+    detail: "Una semana de ensayo real: cero días perdidos y margen suficiente antes del cierre."
+  "1 dic":
+    label: Arranca la liga
+    detail: "Primer mes de competición."
+stages:
+  "0": "Comprobar qué ofrece la fuente meteorológica"
+  "1": "Probar la cadena completa con una semana"
+  "2": "Descargar los últimos 13 meses"
+  "3": "Completar el histórico desde abril de 2024"

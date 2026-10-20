@@ -1,0 +1,12 @@
+[Unit]
+Description=Predico 50Hertz: archivo ENTSO-E, 06:00 UTC
+
+[Timer]
+# UTC explícito: no cambia con el horario de verano de Berlín
+OnCalendar=*-*-* 06:00:00 UTC
+Persistent=true
+AccuracySec=1s
+Unit=predico-entsoe-daily.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,31 @@
+# Centroides reales de F2.6 (MaStR), calculados con `python -m predico50hz.ingest.mastr`.
+# Formato de `load_points`; `capacity_mw` y `n_units` son extra y los
+# ignora `load_points`. Pesos = capacidad ACTUAL de la zona de control de 50Hertz.
+source: "MaStR Gesamtdatenexport (Bundesnetzagentur, DL-DE-BY-2.0)"
+export_date: "20261015"
+generated_at: "2026-10-16T14:03:55+00:00"
+k_land: 16
+seed: 42
+provisional: false
+points:
+  - {"id": "bb_01", "lat": 53.246, "lon": 12.064, "kind": "land", "capacity_mw": 2389.2, "n_units": 1050, "note": "Tierra, Brandenburg, Landkreis dominante: Prignitz"}
+  - {"id": "bb_02", "lat": 51.8755, "lon": 13.1506, "kind": "land", "capacity_mw": 2150.3, "n_units": 971, "note": "Tierra, Brandenburg, Landkreis dominante: Teltow-Fl\u00e4ming"}
+  - {"id": "bb_03", "lat": 53.3125, "lon": 13.9792, "kind": "land", "capacity_mw": 2070.7, "n_units": 832, "note": "Tierra, Brandenburg, Landkreis dominante: Uckermark"}
+  - {"id": "bb_04", "lat": 51.7813, "lon": 14.0968, "kind": "land", "capacity_mw": 1823.7, "n_units": 720, "note": "Tierra, Brandenburg, Landkreis dominante: Dahme-Spreewald"}
+  - {"id": "bb_05", "lat": 52.515, "lon": 14.0747, "kind": "land", "capacity_mw": 1685.7, "n_units": 629, "note": "Tierra, Brandenburg, Landkreis dominante: M\u00e4rkisch-Oderland"}
+  - {"id": "bb_06", "lat": 52.6725, "lon": 12.8532, "kind": "land", "capacity_mw": 1029.3, "n_units": 549, "note": "Tierra, Brandenburg, Landkreis dominante: Havelland"}
+  - {"id": "mv_01", "lat": 53.8972, "lon": 13.2831, "kind": "land", "capacity_mw": 1629.5, "n_units": 776, "note": "Tierra, Mecklenburg-Vorpommern, Landkreis dominante: Vorpommern-Greifswald"}
+  - {"id": "mv_02", "lat": 53.9757, "lon": 12.1052, "kind": "land", "capacity_mw": 1092.8, "n_units": 486, "note": "Tierra, Mecklenburg-Vorpommern, Landkreis dominante: Rostock"}
+  - {"id": "mv_03", "lat": 53.6686, "lon": 10.9617, "kind": "land", "capacity_mw": 619.7, "n_units": 271, "note": "Tierra, Mecklenburg-Vorpommern, Landkreis dominante: Nordwestmecklenburg"}
+  - {"id": "sn_01", "lat": 51.0128, "lon": 13.0957, "kind": "land", "capacity_mw": 881.3, "n_units": 541, "note": "Tierra, Sachsen, Landkreis dominante: Mittelsachsen"}
+  - {"id": "sn_02", "lat": 51.1433, "lon": 14.6538, "kind": "land", "capacity_mw": 307.3, "n_units": 203, "note": "Tierra, Sachsen, Landkreis dominante: G\u00f6rlitz"}
+  - {"id": "st_01", "lat": 51.6229, "lon": 11.8006, "kind": "land", "capacity_mw": 1914.3, "n_units": 989, "note": "Tierra, Sachsen-Anhalt, Landkreis dominante: Mansfeld-S\u00fcdharz"}
+  - {"id": "st_02", "lat": 52.643, "lon": 11.6787, "kind": "land", "capacity_mw": 1535.5, "n_units": 613, "note": "Tierra, Sachsen-Anhalt, Landkreis dominante: Stendal"}
+  - {"id": "st_03", "lat": 52.0819, "lon": 11.5119, "kind": "land", "capacity_mw": 1403.8, "n_units": 733, "note": "Tierra, Sachsen-Anhalt, Landkreis dominante: B\u00f6rde"}
+  - {"id": "th_01", "lat": 51.1511, "lon": 10.7959, "kind": "land", "capacity_mw": 1465.1, "n_units": 652, "note": "Tierra, Th\u00fcringen, Landkreis dominante: S\u00f6mmerda"}
+  - {"id": "th_02", "lat": 51.036, "lon": 12.0006, "kind": "land", "capacity_mw": 1320.9, "n_units": 596, "note": "Tierra, Th\u00fcringen, Landkreis dominante: Burgenlandkreis"}
+  - {"id": "sea_arcadis_ost", "lat": 54.8181, "lon": 13.657, "kind": "sea", "capacity_mw": 257.2, "n_units": 27, "note": "Mar (B\u00e1ltico); parques: Arcadis Ost I"}
+  - {"id": "sea_arkona_becken", "lat": 54.8303, "lon": 14.0731, "kind": "sea", "capacity_mw": 1059.1, "n_units": 151, "note": "Mar (B\u00e1ltico); parques: Arkona Becken S\u00fcd-Ost, OWP Windanker, WIKINGER"}
+  - {"id": "sea_baltic_1", "lat": 54.6094, "lon": 12.6506, "kind": "sea", "capacity_mw": 48.3, "n_units": 21, "note": "Mar (B\u00e1ltico); parques: Baltic 1"}
+  - {"id": "sea_baltic_2", "lat": 54.9826, "lon": 13.1627, "kind": "sea", "capacity_mw": 302.4, "n_units": 80, "note": "Mar (B\u00e1ltico); parques: Baltic 2"}
+  - {"id": "sea_baltic_eagle", "lat": 54.8301, "lon": 13.8582, "kind": "sea", "capacity_mw": 476.2, "n_units": 50, "note": "Mar (B\u00e1ltico); parques: Baltic Eagle"}

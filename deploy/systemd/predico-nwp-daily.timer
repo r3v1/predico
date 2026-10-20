@@ -1,0 +1,12 @@
+[Unit]
+Description=Predico 50Hertz: pasada NWP 00Z, 07:45 UTC
+
+[Timer]
+# UTC explícito: no cambia con el horario de verano de Berlín
+OnCalendar=*-*-* 07:45:00 UTC
+Persistent=true
+AccuracySec=1s
+Unit=predico-nwp-daily.service
+
+[Install]
+WantedBy=timers.target

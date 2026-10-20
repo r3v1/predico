@@ -40,7 +40,7 @@ STATS = ("ctrl", "mean", "std", "p10", "p50", "p90")
 # Método de las variables instantáneas: "linear" o "pchip" (docs/f3-features.md §3).
 INSTANT_INTERP = "linear"
 
-# Partición de la v0.1 por `target_date` (PLAN §2.5 y F4.2): (nombre, primer día, último día).
+# Partición de la v0.1 por `target_date` (ADR 0010): (nombre, primer día, último día).
 SPLITS: tuple[tuple[str, dt.date, dt.date], ...] = (
     ("train", dt.date(2025, 9, 1), dt.date(2026, 5, 31)),
     ("valid", dt.date(2026, 6, 1), dt.date(2026, 7, 31)),

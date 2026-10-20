@@ -11,7 +11,7 @@ import eccodes
 import numpy as np
 import numpy.typing as npt
 
-# Dominio del PLAN 2.3 (grados).
+# Dominio del ADR 0003 (grados).
 LAT_MIN, LAT_MAX = 49.5, 56.0
 LON_MIN, LON_MAX = 8.5, 16.0
 EPS = 1e-6

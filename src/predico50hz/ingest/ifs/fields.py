@@ -1,4 +1,4 @@
-"""Campos de IFS que se extraen (PLAN 2.2) y su nombre de variable en bronce."""
+"""Campos de IFS que se extraen (ADR 0003) y su nombre de variable en bronce."""
 
 from dataclasses import dataclass
 

@@ -1,4 +1,4 @@
-"""Estado de la operación: últimos días por job y puerta G0 (PLAN §1).
+"""Estado de la operación: últimos días por job y puerta G0 (ADR 0005).
 
 **G0** = `G0_DAYS` días UTC seguidos, hasta hoy, en los que `nwp-daily` y `entsoe-daily` tienen al
 menos una ejecución correcta y **ninguna** fallida (ni del propio job ni de `OnFailure`). Un día con

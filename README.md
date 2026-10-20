@@ -2,12 +2,13 @@
 
 Pronóstico probabilístico (Q10, Q50, Q90) de la generación eólica en la zona de control de 50Hertz para la liga de Predico (`germany_wind_50hertz_ca`): ingesta de datos meteorológicos (IFS ENS de ECMWF), generación y precios (ENTSO-E) y capacidad renovable (MaStR), con modelos de gradient boosting y calibración conformal.
 
-Documentación del proyecto:
+## Dónde está cada cosa
 
-- `PLAN.md`: plan de trabajo.
-- `STACK.md`: stack técnico y buenas prácticas.
-- `docs/adr/`: decisiones de arquitectura.
-- `docs/runbooks/`: procedimientos ante fallos en producción.
+- **Trabajo pendiente:** [milestones](https://github.com/r3v1/predico/milestones) e [issues](https://github.com/r3v1/predico/issues) de GitHub. Los milestones van numerados en el orden del calendario (`1 · G0` … `6 · Rodaje y liga`, `9 · Después del 1 dic`); cada feature es una épica con sub-issues, y el orden entre tareas está marcado con «Blocked by». Para sembrar trabajo nuevo en bloque: `.github/backlog.yaml` y `uv run python scripts/sync_github_backlog.py` (solo crea lo que falta).
+- **Decisiones:** [`docs/adr/`](docs/adr/README.md), un ADR por decisión (fuente NWP, calendario y puertas, validación, cuantiles…).
+- **Lo ya hecho:** [`docs/historial.md`](docs/historial.md) hasta el 20 oct 2026; desde entonces, los issues cerrados.
+- **Detalle técnico por área:** `docs/` (`stage0-*`, `stage1-*`, `f1.5-f2.7-operations.md`, `f1.6-validation.md`, `f2-entsoe.md`, `f2.6-mastr.md`, `f3-features.md`, `f4-backtest.md`, `report.md`).
+- **Stack técnico:** `STACK.md`. **Procedimientos ante fallos:** `docs/runbooks/`.
 
 ## Cómo arrancar
 
@@ -23,7 +24,7 @@ uv run pyright                   # tipos estrictos en src/
 
 ## Ingesta NWP: IFS ENS desde dynamical.org
 
-Fuente principal: ECMWF IFS ENS 0,25° (51 miembros, pasada 00Z, desde 2024-04-01) del Icechunk público de dynamical.org, recortado al dominio 49,5–56,0° N × 8,5–16,0° E. Detalle en `PLAN.md` §2 y `docs/stage1-dynamical.md`.
+Fuente principal: ECMWF IFS ENS 0,25° (51 miembros, pasada 00Z, desde 2024-04-01) del Icechunk público de dynamical.org, recortado al dominio 49,5–56,0° N × 8,5–16,0° E. Decisión en el [ADR 0001](docs/adr/0001-fuente-nwp-ifs-ens-dynamical.md); detalle en `docs/stage1-dynamical.md`.
 
 | Capa | Dónde | Contenido |
 |---|---|---|
@@ -33,7 +34,7 @@ Fuente principal: ECMWF IFS ENS 0,25° (51 miembros, pasada 00Z, desde 2024-04-0
 
 ### Grafo de datos y modelos
 
-Vista estática del grafo de assets que tendrá Dagster (Fase 2). Cada nodo es un asset; las flechas, dependencias. El color indica el estado a 16 oct 2026 (`PLAN.md` lleva el detalle).
+Vista estática del grafo de assets que tendrá Dagster (producción). Cada nodo es un asset; las flechas, dependencias. El estado de cada pieza se sigue en los milestones de GitHub.
 
 ```mermaid
 flowchart TD
@@ -76,7 +77,7 @@ flowchart TD
         GATES{{"G1 · G2"}}
     end
 
-    subgraph PROD["Fase 2 · Producción"]
+    subgraph PROD["Producción"]
         DAILY["daily_forecast<br/>00Z disponible ~08:20 UTC"]
         SUBMIT["predico_submission<br/>antes del cierre"]
     end
@@ -102,24 +103,12 @@ flowchart TD
     FOUND --> METRICS
     METRICS --> GATES --> DAILY --> SUBMIT
 
-    classDef done fill:#d3f9d8,stroke:#2b8a3e,color:#1b4332
-    classDef progress fill:#fff3bf,stroke:#e67700,color:#5c3c00
-    classDef partial fill:#ffe8cc,stroke:#d9480f,color:#5c2b00
-    classDef pending fill:#f1f3f5,stroke:#868e96,color:#343a40
     classDef ext fill:#e7f5ff,stroke:#1971c2,color:#0b3d6b
 
     class DYN,ENFO,ENTSOE,MASTR ext
-    class VAL,SILVER done
-    class BRONZE,BACKUP partial
-    class GEN,CAP,PRICE,CLUST done
-    class OPF partial
-    class FEAT,TARGET,LEAK done
-    class FOLDS,METRICS done
-    class BASE partial
-    class LSM,LGBM,CQR,FOUND,GATES,DAILY,SUBMIT pending
 ```
 
-Leyenda: verde = hecho · amarillo = en curso · naranja = parcial · gris = pendiente · azul = fuente externa. Los hexágonos son controles que bloquean el paso: si fallan, los assets de abajo no se materializan.
+Leyenda: azul = fuente externa. Los hexágonos son controles que bloquean el paso: si fallan, los assets de abajo no se materializan.
 
 ### Ciclo de vida de una pasada 00Z
 
@@ -137,7 +126,7 @@ stateDiagram-v2
     Respaldo --> Plata
     Validada --> Variables: as-of, 15 min
     Variables --> Entrenamiento: histórico
-    Variables --> Predicción: diaria (Fase 2)
+    Variables --> Predicción: diaria (producción)
     Predicción --> Enviada: margen ≥ 60 min antes del cierre
     Entrenamiento --> [*]
     Enviada --> [*]
@@ -160,20 +149,13 @@ Unos 10 s y ~175 MB de red por pasada; ~6 MB de bronce por pasada. Métricas en 
 uv run python -m predico50hz.ingest.dynamical.validate --start 2025-09-01 --end 2026-10-15
 ```
 
-- **Plata:** esquema Pandera por pasada (columnas y tipos, 104 filas, 8 puntos × 13 pasos, rangos físicos, p10 ≤ p50 ≤ p90, std ≥ 0, sin NaN salvo la racha antes del 2024-11-13).
+- **Plata:** esquema Pandera por pasada (columnas y tipos, 273 filas, 21 centroides × 13 pasos, rangos físicos, p10 ≤ p50 ≤ p90, std ≥ 0, sin NaN salvo la racha antes del 2024-11-13).
 - **Bronce:** resumen por variable y paso validado con Pandera (NaN incluido el último paso, miembros vacíos, 51 miembros, malla 27 × 31, rangos, procedencia).
 - **Huecos:** cada día del rango queda cubierto o con su causa (`no_ingerida`, `plata_ausente`, `nan`, `fuera_de_rango`, `falla_esquema`), y la cobertura se compara con el 98 %.
 
 Conviene lanzarlo con la ingesta parada: si corre a la vez, lee el snapshot del bronce del arranque. Umbrales, decisiones y limitaciones en `docs/f1.6-validation.md`.
 
-### Estado
-
-| Etapa | Rango | Estado |
-|---|---|---|
-| 0 | Metadatos, cobertura y latencia | Hecha (`docs/stage0-dynamical.md`) |
-| 1 | 2026-10-01 → 2026-10-07 | Hecha (`docs/stage1-dynamical.md`) |
-| 2 | 2025-09-01 → 2026-10-15 | Hecha: 410/410 pasadas, validación 100 % |
-| 3 | 2024-04-01 → 2025-08-31 | Pendiente |
+El histórico se descarga por etapas ([ADR 0004](docs/adr/0004-descarga-del-historico-por-etapas.md)); el avance de cada una está en `docs/historial.md` y en el milestone `3 · G1`.
 
 ## Ingesta ENTSO-E (F2)
 
@@ -214,7 +196,7 @@ uv run python -m predico50hz.ingest.mastr --download   # export completo más re
 uv run python -m predico50hz.report      # genera report/index.html (autocontenido, ~2 MB; se abre sin red)
 ```
 
-Página única, sin jerga, para negocio: estado del plan, mapa de aerogeneradores y grupos, fuentes, viaje del dato, calidad, viento y producción, reloj diario, riesgos y modelo. Todas las cifras salen de los datos reales y el avance se lee de las marcas de `PLAN.md`. Se versionan el generador (`src/predico50hz/report/`) y los textos editables (`report/changelog.yaml`, `report/insights.yaml`, …); el HTML no. **En cada evolutivo:** añadir su entrada a `report/changelog.yaml`, revisar `report/insights.yaml` y regenerar. Detalle en `docs/report.md`.
+Página única, sin jerga, para negocio: estado del plan, mapa de aerogeneradores y grupos, fuentes, viaje del dato, calidad, viento y producción, reloj diario, riesgos y modelo. Todas las cifras salen de los datos reales y el avance del plan se lee de los milestones e issues de GitHub (con una copia local por si no hay red). Se versionan el generador (`src/predico50hz/report/`) y los textos editables (`report/changelog.yaml`, `report/insights.yaml`, …); el HTML no. **En cada evolutivo:** añadir su entrada a `report/changelog.yaml`, revisar `report/insights.yaml` y regenerar. Detalle en `docs/report.md`.
 
 ## Capa de variables (F3)
 
@@ -262,8 +244,9 @@ Métricas como Predico, en MW: RMSE del Q50, Winkler medio (α = 0,2), cobertura
 ```
 src/predico50hz/   código de la librería (ingest, features, models, evaluation, orchestration)
 tests/             unit, integration y leakage (tests anti look-ahead)
-docs/              ADR y runbooks
+docs/              detalle técnico por área, ADR (docs/adr/), historial y runbooks
 config/            configuración por entorno (YAML)
 notebooks/         exploración; nunca código de producción
-scripts/           utilidades puntuales
+scripts/           utilidades puntuales (incluida la siembra del backlog en GitHub)
+.github/           semilla del backlog (backlog.yaml)
 ```

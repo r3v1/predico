@@ -247,7 +247,9 @@ a { color: var(--wind-ink); }
 .tl-done { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; background: var(--wind); border-radius: 4px; }
 .tl-range { position: absolute; top: 50%; height: 10px; margin-top: -5px; border-radius: 6px; background: var(--paper-2); border: 1px solid var(--line-2); }
 .tl-today { position: absolute; top: calc(50% - 24px); bottom: calc(50% - 24px); width: 0; border-left: 1.5px dashed var(--coral); z-index: 2; }
-.tl-today span { position: absolute; top: 100%; left: -16px; margin-top: 2px; font: 700 10.5px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--coral-ink); background: var(--card); padding: 3px 5px; border-radius: 4px; white-space: nowrap; }
+.tl-today span { position: absolute; top: 30px; font: 700 10.5px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--coral-ink); background: var(--card); padding: 3px 5px; border-radius: 4px; white-space: nowrap; }
+.tl-today.lab-r span { left: 6px; }
+.tl-today.lab-l span { right: 6px; }
 .tl-dot { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--card); border: 2px solid var(--pending); z-index: 3; }
 .tl-dot.done { background: var(--wind); border-color: var(--wind); }
 .tl-dot.progress { background: var(--amber); border-color: var(--amber); }

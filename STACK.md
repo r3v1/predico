@@ -23,7 +23,7 @@ Cada elección de este documento se registra como un ADR (Architecture Decision 
 | NWP respaldo (GRIB) | **eccodes + cfgrib** con descargador propio por rangos de bytes (`src/predico50hz/ingest/ifs/`), stream `enfo` | ecmwf-opendata/Herbie: las rutas del bucket cambian con la fecha y la etapa 0 las resolvió listando; ver `docs/stage1-pipeline.md` |
 | Campos meteorológicos | **xarray + Zarr v3 + Icechunk** | NetCDF: sin versionado ni escritura concurrente segura |
 | Datos tabulares | **Polars + Parquet con Delta Lake (delta-rs)** y **DuckDB** para consultas | Iceberg: más pesado de operar sin un catálogo; Delta es suficiente para un solo escritor |
-| Cliente ENTSO-E | **entsoe-py** | Llamadas REST propias: solo si el cliente falla con las revisiones |
+| Cliente ENTSO-E | **Cliente `httpx` propio** (sustituye a entsoe-py, [ADR 0022](docs/adr/0022-cliente-entsoe-propio.md)) | entsoe-py: `EntsoeRawClient` rompe los ZIP, no reintenta por código HTTP y deja el token en las excepciones |
 | Gradient boosting | **LightGBM** | XGBoost: solo como comparación si el entrenamiento supera 2 h en CPU |
 | Optimización de hiperparámetros | **Optuna** con almacenamiento en SQLite o PostgreSQL | Ray Tune: excesivo para una sola máquina |
 | Calibración conformal | **Implementación propia de CQR** (unas 50 líneas, con tests) | MAPIE: válido, pero añade una dependencia para algo pequeño y crítico que conviene controlar línea a línea |
@@ -154,16 +154,24 @@ predico-50hertz/
 
 ---
 
-## 5. ADRs iniciales a escribir el día 1
+## 5. ADRs
 
-| ADR | Decisión |
+Cada elección de este documento está registrada como ADR en [`docs/adr/`](docs/adr/README.md):
+
+| Tema | ADR |
 |---|---|
-| 0001 | Registrar decisiones de arquitectura con ADRs en formato MADR |
-| 0002 | ECMWF IFS ENS de dynamical.org (Icechunk) como fuente NWP principal; GRIB `enfo` de ECMWF Open Data como respaldo |
-| 0003 | Descarga del histórico por etapas, validando antes de escalar |
-| 0004 | Almacenamiento: Zarr + Icechunk para campos; Delta + Parquet para tablas |
-| 0005 | Dagster como único orquestador; Kedro aplazado |
-| 0006 | Q50 con pérdida cuadrática; Q10 y Q90 cuantílicos con CQR propia |
-| 0007 | Periodo reservado nunca visto por la optimización de hiperparámetros |
-| 0008 | Sin frontend propio en la Fase 1; observabilidad con MLflow, Optuna Dashboard, Dagster UI y Grafana |
-| 0009 | Python 3.14 + uv |
+| Registrar decisiones con ADR (MADR) y reglas de documentación | [0019](docs/adr/0019-registro-de-decisiones-con-adr.md) |
+| IFS ENS de dynamical.org como NWP principal; GRIB `enfo` como respaldo | [0001](docs/adr/0001-fuente-nwp-ifs-ens-dynamical.md) |
+| Descarga del histórico por etapas | [0004](docs/adr/0004-descarga-del-historico-por-etapas.md) |
+| Almacenamiento: Zarr + Icechunk para campos; Delta + Parquet para tablas | [0021](docs/adr/0021-almacenamiento-y-formatos.md) |
+| Cliente propio de ENTSO-E | [0022](docs/adr/0022-cliente-entsoe-propio.md) |
+| Dagster como único orquestador; Kedro aplazado | [0023](docs/adr/0023-dagster-como-orquestador.md) |
+| LightGBM, Optuna, CQR propia, PyTorch y MLflow | [0024](docs/adr/0024-librerias-de-modelado.md) |
+| Q50 con pérdida cuadrática; Q10 y Q90 cuantílicos con CQR | [0014](docs/adr/0014-cuantiles-y-calibracion-conformal.md) |
+| Periodo reservado nunca visto por la optimización | [0010](docs/adr/0010-validacion-walk-forward-y-periodo-reservado.md) |
+| Validación con Pandera | [0025](docs/adr/0025-validacion-con-pandera.md) |
+| Configuración y secretos | [0026](docs/adr/0026-configuracion-y-secretos.md) |
+| Sin frontend propio en la Fase 1; stack de frontend para después | [0027](docs/adr/0027-sin-frontend-propio-en-fase-1.md) |
+| Calidad de código, pre-commit y CI | [0028](docs/adr/0028-calidad-de-codigo-y-ci.md) |
+| Trazabilidad de experimentos y versionado del modelo | [0029](docs/adr/0029-experimentos-y-versionado-del-modelo.md) |
+| Python 3.14 + uv | [0020](docs/adr/0020-python-314-y-uv.md) |

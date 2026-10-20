@@ -1,32 +1,48 @@
-# Etiquetas de lenguaje llano para lo que se lee de PLAN.md (que está redactado para el equipo
-# técnico). Las claves son el texto de la fecha del calendario y el número de etapa.
-milestones:
-  "17 oct":
+# Etiquetas de lenguaje llano para lo que se lee de GitHub (que está redactado para el equipo
+# técnico). Los hitos se indexan por el número del título del milestone («3 · G1 · ...» → 3).
+past_milestones:  # hitos ya cumplidos que no existen en GitHub
+  - date: 2026-10-17
     label: Etapas 0 y 1 completadas
     detail: "Comprobamos que la fuente meteorológica sirve y que la cadena funciona de punta a punta."
-  "22 oct":
+milestones:
+  1:
     label: Histórico de 13 meses y descarga diaria en marcha
     detail: "Puerta G0: siete días seguidos de descarga diaria sin fallos."
-  "29 oct":
+  2:
     label: Primera versión del modelo (v0.1)
     detail: "Un modelo sencillo, de punta a punta, medido contra las cuatro referencias."
-  "5 nov":
+  3:
     label: Histórico completo y primera puerta de calidad
     detail: "Puerta G1: no ser peores que el operador y acertar el rango del 80 % entre el 76 y el 84 % de los días."
-  "12 nov":
+  4:
     label: Modelo final (v0.2)
     detail: "Puerta G2: la mejora se confirma en un periodo que el modelo no ha visto."
-  "13–24 nov":
+  5:
+    start: 2026-11-13
     label: Construcción del sistema de producción
     detail: "Automatizar el envío diario a la liga."
-  "25–30 nov":
-    label: Rodaje en la liga
-    detail: "Una semana de ensayo real: cero días perdidos y margen suficiente antes del cierre."
-  "1 dic":
-    label: Arranca la liga
-    detail: "Primer mes de competición."
-stages:
-  "0": "Comprobar qué ofrece la fuente meteorológica"
-  "1": "Probar la cadena completa con una semana"
-  "2": "Descargar los últimos 13 meses"
-  "3": "Completar el histórico desde abril de 2024"
+  6:
+    start: 2026-11-25
+    label: Rodaje y arranque de la liga
+    detail: "Una semana de ensayo real (cero días perdidos y margen suficiente antes del cierre) y, el 1 de diciembre, primer mes de competición."
+  9:  # sin fecha en GitHub: se sitúa en el inicio de la liga
+    label: Mejoras para después del arranque
+    detail: "Trabajo útil que no condiciona la entrada en la liga; aquí va lo que se aplaza si el calendario aprieta."
+rules:
+  - "Si G1 no se supera el 5 de noviembre, el inicio pasa al 1 de enero."
+  - "Si el 15 de noviembre no hay credenciales de Predico, el inicio pasa al 1 de enero: sin rodaje no se entra en liga."
+stages:  # la etapa con `derive` toma su estado de la épica con esa marca de backlog
+  "0": {what: "Comprobar qué ofrece la fuente meteorológica", status: done}
+  "1": {what: "Probar la cadena completa con una semana", status: done}
+  "2": {what: "Descargar los últimos 13 meses", status: done}
+  "3": {what: "Completar el histórico desde abril de 2024", derive: f1.4}
+blocks:  # id de backlog de cada épica → título en lenguaje llano
+  ops: "Operación diaria de la descarga"
+  f2.5: "Horas de publicación de los datos del operador"
+  f5: "Referencias de comparación"
+  f6: "Modelo principal"
+  f8: "Calidad e ingeniería"
+  f1.4: "Histórico meteorológico completo"
+  f1.7: "Respaldo de la previsión meteorológica"
+  f7: "Modelos de IA preentrenados"
+  fase2: "Sistema de producción"

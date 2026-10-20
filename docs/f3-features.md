@@ -1,6 +1,6 @@
 # F3 — Capa de variables y control de look-ahead
 
-Cubre PLAN F3.1 a F3.4 y el test anti look-ahead de F3. Código en `src/predico50hz/features/`; tabla oro en `data/gold/features` (Delta Lake); informes en `data/validation/gold_features.json` y `data/validation/gold_interp_check.json`. Todo el tiempo es UTC salvo que se diga Europe/Berlin; los identificadores van en inglés.
+Cubre F3.1 a F3.4 y el test anti look-ahead de F3. Código en `src/predico50hz/features/`; tabla oro en `data/gold/features` (Delta Lake); informes en `data/validation/gold_features.json` y `data/validation/gold_interp_check.json`. Todo el tiempo es UTC salvo que se diga Europe/Berlin; los identificadores van en inglés.
 
 ## 1. Cómo ejecutarlo
 
@@ -117,7 +117,7 @@ Hora local de Europe/Berlin del inicio del intervalo: `hour_local` (fraccional, 
 
 ### Meta (11 columnas)
 
-`forecast_issue_date`, `target_date` (D+1 local), `ts_utc`, `closure_utc`, `nwp_init_time`, `available_at_nwp`, `available_at_capacity`, `available_at_calendar`, `n_steps_day` (92/96/100), `capacity_ffilled` y `split_v01`. **`split_v01` es meta, nunca feature**: por `target_date`, `train` sep 2025 – may 2026, `valid` jun – jul 2026, `holdout` ago 2026 en adelante (PLAN §2.5 y F4.2).
+`forecast_issue_date`, `target_date` (D+1 local), `ts_utc`, `closure_utc`, `nwp_init_time`, `available_at_nwp`, `available_at_capacity`, `available_at_calendar`, `n_steps_day` (92/96/100), `capacity_ffilled` y `split_v01`. **`split_v01` es meta, nunca feature**: por `target_date`, `train` sep 2025 – may 2026, `valid` jun – jul 2026, `holdout` ago 2026 en adelante (ADR 0010).
 
 ## 5. Objetivo (F3.3)
 
@@ -163,7 +163,7 @@ Además, 40 tests unitarios nuevos y 10 de fuga (50 en total) (`tests/unit/test_
 
 ## 9. Precio day-ahead: fuera de la v0.1
 
-PLAN F3 exige usar el precio solo si su hora de publicación medida es anterior al cierre. Solo existe **una** observación de su hora de publicación (`fetched_at` 2026-10-16 13:17 UTC, posterior al cierre de verano de ese día), así que **no está medida y no entra**: no hay bloque `price` ni columna `available_at_price`. Para medirla: descargas horarias `uv run python -m predico50hz.ingest.entsoe --dataset prices --days 2` entre las 10:00 y las 14:00 UTC durante varios días, y tomar para cada D la primera `fetched_at` del bronce en la que aparece D+1 (primer `ts_utc` ≥ el inicio del día objetivo). Solo se incorporaría como bloque nuevo con su `available_at_price` si esa hora (con margen, p. ej. el máximo observado) es anterior al cierre (13:00 UTC en verano).
+El ADR 0009 exige usar el precio solo si su hora de publicación medida es anterior al cierre. Solo existe **una** observación de su hora de publicación (`fetched_at` 2026-10-16 13:17 UTC, posterior al cierre de verano de ese día), así que **no está medida y no entra**: no hay bloque `price` ni columna `available_at_price`. Para medirla: descargas horarias `uv run python -m predico50hz.ingest.entsoe --dataset prices --days 2` entre las 10:00 y las 14:00 UTC durante varios días, y tomar para cada D la primera `fetched_at` del bronce en la que aparece D+1 (primer `ts_utc` ≥ el inicio del día objetivo). Solo se incorporaría como bloque nuevo con su `available_at_price` si esa hora (con margen, p. ej. el máximo observado) es anterior al cierre (13:00 UTC en verano).
 
 ## 10. Decisiones
 

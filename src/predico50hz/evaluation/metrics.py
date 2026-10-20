@@ -1,5 +1,5 @@
 # ruff: noqa: RUF002, E501
-"""Métricas del backtest, en MW e idénticas a las de Predico (PLAN F4.3).
+"""Métricas del backtest, en MW e idénticas a las de Predico (ADR 0011).
 
 Notación: `y` es la generación real (MW), `l = Q10`, `m = Q50` y `u = Q90` los pronósticos (MW),
 `n` el número de cuartos de hora evaluados y `α = 0,2` (intervalo central del 80 %).

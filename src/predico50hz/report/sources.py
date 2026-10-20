@@ -11,7 +11,7 @@ from predico50hz.report.quality import latest_ifs_report
 from predico50hz.report.util import dir_size, read_json
 
 MADRID = ZoneInfo("Europe/Madrid")
-CLOSE_UTC = {"summer": "13:00", "winter": "14:00"}  # cierre a las 15:00 de Madrid (PLAN.md §1)
+CLOSE_UTC = {"summer": "13:00", "winter": "14:00"}  # cierre a las 15:00 de Madrid
 
 
 def _hhmm(seconds: float) -> str:

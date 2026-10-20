@@ -67,22 +67,6 @@ def _facts(data: dict[str, Any]) -> dict[str, str]:
     return f
 
 
-def _plan(paths: Paths, today: dt.date, labels: dict[str, Any]) -> dict[str, Any] | None:
-    p = plan.parse_plan(paths.plan, today)
-    if p is None:
-        return None
-    ms = labels.get("milestones") or {}
-    for m in p["milestones"]:
-        over = ms.get(m["key"])
-        if isinstance(over, dict):
-            m["label"] = over.get("label", m["label"])
-            m["gate_text"] = over.get("detail", m["gate_text"])
-    st = labels.get("stages") or {}
-    for s in p["stages"]:
-        s["what"] = st.get(s["id"], s["what"])
-    return p
-
-
 def _kpis(data: dict[str, Any]) -> list[dict[str, Any]]:
     z, q = data.get("zone"), data.get("quality")
     prod = (data.get("production") or {}).get("daily")
@@ -150,7 +134,13 @@ def _variables(doc: dict[str, Any], fc: dict[str, Any]) -> dict[str, Any]:
     return {"groups": doc.get("groups", {}), "cards": cards}
 
 
-def build_data(paths: Paths, now: dt.datetime | None = None) -> dict[str, Any]:
+def build_data(
+    paths: Paths,
+    now: dt.datetime | None = None,
+    *,
+    offline: bool = False,
+    fetch: plan.Fetch = plan.gh_api,
+) -> dict[str, Any]:
     now = now or dt.datetime.now(dt.UTC)
     today = now.date()
     cont = content.load(paths)
@@ -164,7 +154,9 @@ def build_data(paths: Paths, now: dt.datetime | None = None) -> dict[str, Any]:
             "lead_hours": [LEAD_HOURS[0], LEAD_HOURS[-1]],
             "versions": sources.versions(paths),
         },
-        "plan": _plan(paths, today, cont["labels"]),
+        "plan": plan.build_plan(
+            plan.load(paths.plan_cache, now, offline=offline, fetch=fetch), cont["labels"], today
+        ),
         "changelog": cont["changelog"],
         "zone": zone.aggregate(paths),
         "quality": quality.aggregate(paths, today),
@@ -243,8 +235,15 @@ def render(data: dict[str, Any]) -> str:
     return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: parts[m.group(1)], template)
 
 
-def build(paths: Paths, out: Path, now: dt.datetime | None = None, dump_json: bool = True) -> Path:
-    data = build_data(paths, now)
+def build(
+    paths: Paths,
+    out: Path,
+    now: dt.datetime | None = None,
+    dump_json: bool = True,
+    *,
+    offline: bool = False,
+) -> Path:
+    data = build_data(paths, now, offline=offline)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(data), "utf-8")
     if dump_json:

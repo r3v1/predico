@@ -9,7 +9,7 @@
   máximo, miembros sin datos, forma) y esa tabla se valida con Pandera. Así se revisa el último
   paso sin depender de `ingested_forecast_length`, que es NaT, y nunca se carga todo el bronce.
 - Huecos: cada día del rango se clasifica y los no cubiertos llevan su causa; se compara la
-  cobertura con el umbral del PLAN (98 %).
+  cobertura con el umbral de F1 (98 %).
 
 Nunca escribe: el Icechunk se abre con una sesión de solo lectura (la ingesta puede estar
 corriendo) y la plata solo se lee.
@@ -50,7 +50,7 @@ from predico50hz.ingest.ifs.extract import load_points
 
 DEFAULT_OUT_DIR = "data/validation"
 MAX_LISTED_GAPS = 15
-MIN_COVERAGE = 0.98  # PLAN F1: ≥ 98 % de días con pasada 00Z completa
+MIN_COVERAGE = 0.98  # F1: ≥ 98 % de días con pasada 00Z completa
 GUST = "wind_gust_10m"
 GUST_START = dt.date(2024, 11, 13)  # primera pasada con racha (docs/stage0-dynamical.md)
 N_LEADS = len(LEAD_HOURS)

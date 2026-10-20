@@ -1,6 +1,6 @@
 # Etapa 1 — Cadena GRIB (IFS HRES, ECMWF Open Data)
 
-**16 oct 2026 · Estado: cadena validada; desde PLAN v1.2 es la base del respaldo (F1.7), no la fuente principal.**
+**16 oct 2026 · Estado: cadena validada; desde el ADR 0001 es la base del respaldo (F1.7), no la fuente principal.**
 
 El agente que la construyó se detuvo antes de escribir este informe. Los datos salen de `data/stage1/metrics.json` y `data/stage1/week.log`; lo no medido se indica.
 

@@ -8,7 +8,7 @@ STAC_URL = "https://stac.dynamical.org/catalog.json"
 STAC_ASSET = "icechunk-https"
 PINNED_VERSION = "0.1.0"
 
-# PLAN 2.2: viento y termodinamica; la velocidad se deriva por miembro en plata.
+# ADR 0003: viento y termodinamica; la velocidad se deriva por miembro en plata.
 VARIABLES: tuple[str, ...] = (
     "wind_u_100m",
     "wind_v_100m",

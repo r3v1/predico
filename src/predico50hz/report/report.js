@@ -260,7 +260,7 @@
   (function () {
     var gen = new Date(D.meta.generated_at);
     var madrid = new Intl.DateTimeFormat('es-ES', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Madrid' }).format(gen);
-    $('#stamp').textContent = 'Generado el ' + madrid.replace(',', ' a las') + ' (hora de Madrid)' + (P ? ' · Plan v' + P.version : '');
+    $('#stamp').textContent = 'Generado el ' + madrid.replace(',', ' a las') + ' (hora de Madrid)' + (P ? ' · Plan: ' + planSrc() : '');
     $('#kpis').innerHTML = D.kpis.map(function (k) {
       var v = k.value == null ? '—' : num(k.value, k.fmt === 'dec1' ? 1 : 0);
       return '<div class="kpi"><div class="v tn">' + v + (k.unit && k.value != null ? '<small>' + esc(k.unit) + '</small>' : '') + '</div><div class="l">' + esc(k.label) + '</div></div>';
@@ -269,10 +269,19 @@
 
   /* ---------- ideas clave ---------- */
   (function () {
-    var b = P ? P.blocks : [];
-    var cnt = function (s) { return b.filter(function (x) { return x.status === s; }).length; };
     var ideas = {};
-    ideas.i1 = P ? 'Faltan <b>' + num(P.days_to_league) + '</b> días para la liga: <b>' + cnt('done') + '</b> bloques de trabajo terminados, <b>' + cnt('progress') + '</b> en marcha y <b>' + cnt('pending') + '</b> por empezar.' : 'No se ha podido leer el plan del proyecto.';
+    ideas.i1 = P ? (function () {
+      // Lo cumplido (hitos y etapas de datos) y lo que queda (tareas de GitHub), por separado:
+      // lo hecho antes de pasar a GitHub no tiene tareas cerradas y no debe contar como cero.
+      var ms = P.milestones, st = P.stages || [];
+      var hit = ms.filter(function (m) { return m.status === 'done'; }).length;
+      var stOk = st.filter(function (x) { return x.status === 'done'; }).length;
+      var closed = 0, total = 0;
+      ms.forEach(function (m) { if (m.total) { closed += m.closed; total += m.total; } });
+      return 'Faltan <b>' + num(P.days_to_league) + '</b> días para la liga. Ya hay <b>' + hit + '</b> ' + (hit === 1 ? 'hito cumplido' : 'hitos cumplidos') +
+        (st.length ? ' y <b>' + stOk + ' de ' + st.length + '</b> etapas de datos descargadas' : '') +
+        '; del trabajo que queda, <b>' + closed + ' de ' + total + '</b> tareas cerradas.';
+    })() : 'No se ha podido leer el plan del proyecto.';
     ideas.i2 = Z ? 'La meteorología se calcula en <b>' + num(Z.n_groups) + '</b> puntos que representan a <b>' + num(Z.n_turbines) + '</b> aerogeneradores y <b>' + num(Z.mw_total / 1000, 1) + ' GW</b> de potencia.' : 'Sin datos del registro de aerogeneradores.';
     ideas.i3 = 'Tres fuentes abiertas y una copia propia de todo: si una cambia, podemos reconstruir lo que hicimos.';
     var v = VOL.nwp || {};
@@ -299,9 +308,13 @@
   })();
 
   /* ============ Capítulo 1: dónde estamos ============ */
+  function planSrc() {
+    var s = P.source || {}, d = s.fetched ? dateShort(String(s.fetched).slice(0, 10)) : '';
+    return s.kind === 'cache' ? 'GitHub (copia del ' + d + ')' : 'GitHub, ' + d;
+  }
   function renderTimeline() {
     var el = $('#timeline');
-    if (!P || !P.milestones.length) { empty(el, 'No se ha podido leer el calendario del plan.'); return; }
+    if (!P || !P.milestones.length) { empty(el, 'No se ha podido leer el calendario (ni de GitHub ni de la caché).'); return; }
     var ms = P.milestones, today = pd(D.meta.today);
     var t0 = Math.min(today, pd(ms[0].date)) - DAY, t1 = pd(P.league_start) + 2 * DAY;
     var W = el.clientWidth, X = function (t) { return (t - t0) / (t1 - t0) * W; };
@@ -318,9 +331,14 @@
         '<div class="d">' + esc(m.key) + (m.gate ? ' <span class="pill-g">' + esc(m.gate) + '</span>' : '') + '</div>' +
         '<div class="t">' + esc(m.label) + '</div>' + (m.gate_text ? '<div class="g">' + esc(m.gate_text) + '</div>' : '') + '</div>';
     });
-    html += '<div class="tl-today" style="left:' + X(today) + 'px"><span>Hoy</span></div>';
+    // La etiqueta «Hoy» va en el hueco entre el eje y los textos, del lado con más sitio hasta el hito vecino.
+    var tx = X(today), xs = ms.map(function (m) { return X((pd(m.date) + pd(m.end)) / 2); });
+    var dl = tx - Math.max.apply(null, [-Infinity].concat(xs.filter(function (x) { return x <= tx; })));
+    var dr = Math.min.apply(null, [Infinity].concat(xs.filter(function (x) { return x > tx; }))) - tx;
+    html += '<div class="tl-today ' + (dr >= dl ? 'lab-r' : 'lab-l') + '" style="left:' + tx + 'px"><span>Hoy</span></div>';
     el.innerHTML = html;
     $('#rules').innerHTML = P.rules && P.rules.length ? '<div class="rules"><b>Reglas de corte</b>' + P.rules.map(function (r) { return '<span>' + esc(r) + '</span>'; }).join('') + '</div>' : '';
+    if (P.source && P.source.kind === 'cache') $('#rules').innerHTML += '<p class="muted">Sin conexión con GitHub: estado de la copia guardada el ' + esc(dateLong(String(P.source.fetched).slice(0, 10))) + '.</p>';
   }
   function renderBlocks() {
     var el = $('#blocks');
@@ -329,7 +347,7 @@
     el.innerHTML = P.blocks.map(function (b) {
       var t = b.total || 0, dn = t ? b.done / t * 100 : 0, pa = t ? (b.partial + b.progress) / t * 100 : 0;
       var cap = t ? b.done + ' de ' + t + ' tareas hechas' + (b.partial + b.progress ? ' · ' + (b.partial + b.progress) + ' a medias' : '') : lbl[b.status];
-      return '<div class="block"><div class="top"><span class="light ' + b.status + '" title="' + lbl[b.status] + '"></span><div><div class="id">' + esc(b.id) + '</div><div class="nm">' + esc(b.title) + '</div></div></div>' +
+      return '<div class="block"><div class="top"><span class="light ' + b.status + '" title="' + lbl[b.status] + '"></span><div>' + (b.id ? '<div class="id">' + esc(b.id) + '</div>' : '') + '<div class="nm">' + esc(b.title) + '</div></div></div>' +
         '<div class="bar"><i class="d" style="width:' + dn + '%"></i><i class="p" style="width:' + pa + '%"></i></div><div class="cap">' + esc(cap) + '</div></div>';
     }).join('');
     $('#stages').innerHTML = (P.stages || []).map(function (s) {
@@ -1201,7 +1219,7 @@
     var utc = D.meta.generated_at.replace('T', ' ').slice(0, 16) + ' UTC';
     var rows = [
       ['Generado', utc],
-      ['Plan del proyecto', P ? 'versión ' + P.version : '—'],
+      ['Plan del proyecto', P ? planSrc() : '—'],
       ['Instantánea de la previsión guardada', V.bronze_snapshot || 'no disponible'],
       ['Conjunto de dynamical.org', V.dataset_version ? 'versión ' + V.dataset_version : '—'],
       ['Previsión guardada', V.ifs_range && V.ifs_range[0] ? dateLong(V.ifs_range[0]) + ' a ' + dateLong(V.ifs_range[1]) : '—'],

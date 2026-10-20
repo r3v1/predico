@@ -6,7 +6,7 @@ Convenciones (todas explícitas en el JSON, bloque `rules`):
 - «Mejora frente al operador» = `(RMSE_operador − RMSE_modelo) / RMSE_operador · 100`, calculado
   sobre exactamente las mismas filas. Positivo = el modelo se equivoca menos.
 - Veredicto «mejora / empeora / igual» con umbral `±VERDICT_THRESHOLD_PCT` % de RMSE.
-- G1 (PLAN §1): RMSE del Q50 ≤ el del operador **y** cobertura del 80 % entre 76 y 84 %.
+- G1 (ADR 0005): RMSE del Q50 ≤ el del operador **y** cobertura del 80 % entre 76 y 84 %.
 - G2: G1 cumplida también en el periodo reservado y RMSE de ese periodo no más de un 10 % peor
   que en validación (control de sobreajuste de F6).
 """

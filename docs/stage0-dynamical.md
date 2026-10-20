@@ -15,7 +15,7 @@ Fecha de la comprobación: 2026-10-16, ~07:55 UTC. Datos completos en `data/stag
 | Zarr | chunk (1, 85, 51, 32, 32) dentro de shards (1, 85, 51, 320, 320); Blosc zstd nivel 3; float32 |
 | `ingested_forecast_length` | **NaT en las 928 pasadas: inutilizable** para detectar completitud (`expected_forecast_length` = 15 d en todas) |
 
-Variables presentes (19): las 10 del PLAN 2.2 (`wind_u/v_100m`, `wind_u/v_10m`, `wind_gust_10m`, `temperature_2m`, `pressure_surface`, `temperature_925hpa`, `temperature_850hpa`, `pressure_reduced_to_mean_sea_level`) más `geopotential_height_850hpa/925hpa/500hpa`, `dew_point_temperature_2m`, `total_cloud_cover_atmosphere`, `precipitation_surface`, `categorical_precipitation_type_surface` y dos radiaciones de superficie. No hay u/v en niveles de presión. Unidades: temperaturas en °C, presiones en Pa, viento en m/s. `wind_gust_10m` es el máximo desde el paso anterior (`step_type` = max).
+Variables presentes (19): las 10 del ADR 0003 (`wind_u/v_100m`, `wind_u/v_10m`, `wind_gust_10m`, `temperature_2m`, `pressure_surface`, `temperature_925hpa`, `temperature_850hpa`, `pressure_reduced_to_mean_sea_level`) más `geopotential_height_850hpa/925hpa/500hpa`, `dew_point_temperature_2m`, `total_cloud_cover_atmosphere`, `precipitation_surface`, `categorical_precipitation_type_surface` y dos radiaciones de superficie. No hay u/v en niveles de presión. Unidades: temperaturas en °C, presiones en Pa, viento en m/s. `wind_gust_10m` es el máximo desde el paso anterior (`step_type` = max).
 
 ## 2. Cobertura en el dominio (49,5–56,0° N, 8,5–16,0° E)
 

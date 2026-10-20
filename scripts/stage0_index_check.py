@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 BASE = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/"
 NS = {"s": "http://s3.amazonaws.com/doc/2006-03-01/"}
 
-# (param, levtype, levelist) segun PLAN 2.2
+# (param, levtype, levelist) segun ADR 0003
 WANTED = (
     [(p, "sfc", None) for p in ("100u", "100v", "10u", "10v", "10fg", "2t", "sp")]
     + [(p, "pl", lv) for p in ("u", "v", "t") for lv in ("1000", "925", "850")]

@@ -1,6 +1,6 @@
 # F4 — Marco de backtest y métricas
 
-Cubre PLAN F4.1 a F4.3 y las referencias mínimas de F5 (sin persistencia). Código en `src/predico50hz/evaluation/` (marco) y `src/predico50hz/models/` (interfaz y referencias); tests en `tests/unit/test_backtest_*.py` y `tests/leakage/test_backtest_folds.py`; salidas en `data/backtest/` (ignorado por git). Todo el tiempo es UTC salvo que se diga lo contrario.
+Cubre F4.1 a F4.3 y las referencias mínimas de F5 (sin persistencia). Código en `src/predico50hz/evaluation/` (marco) y `src/predico50hz/models/` (interfaz y referencias); tests en `tests/unit/test_backtest_*.py` y `tests/leakage/test_backtest_folds.py`; salidas en `data/backtest/` (ignorado por git). Todo el tiempo es UTC salvo que se diga lo contrario.
 
 ## 1. Cómo ejecutarlo
 
@@ -120,7 +120,7 @@ Comprobación independiente: el día 2026-03-10 de la curva de potencia, recalcu
 
 ## 9. Limitaciones y no verificado
 
-- **Persistencia fuera:** exige conocer hasta qué hora hay generación publicada antes del cierre, que no está medida (F2.5/F2.7). PLAN F5 la pide; queda pendiente.
+- **Persistencia fuera:** exige conocer hasta qué hora hay generación publicada antes del cierre, que no está medida (F2.5/F2.7). El ADR 0017 la pide; queda pendiente.
 - **Operador:** solo hay su valor central (sin Winkler ni cobertura) y la serie de `silver` es la **última revisión** descargada (2026-10-16), no necesariamente la que había publicada el día antes: puede ser algo mejor que la real. Su hora de publicación sigue sin medirse.
 - **Holdout de verano-otoño con poco viento** (`y_cf` medio 0,181 frente a 0,203 en train): no garantiza diciembre. La validación solo tiene un invierno, y ya forma parte del entrenamiento a partir de febrero: con 13 meses los modelos no han visto nunca el mismo mes natural previo (por eso la climatología usa los meses vecinos ±1 y, si no hay, todo el entrenamiento).
 - **Cobertura en meses sueltos** oscila entre 69 y 83 %: con ~2 900 filas por mes y autocorrelación fuerte, la banda 76–84 % del total es una condición sobre 8 meses, no una garantía por mes. La calibración conformal (F6) queda para el modelo definitivo.

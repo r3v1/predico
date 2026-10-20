@@ -1,15 +1,17 @@
-# ruff: noqa: PLR2004, RUF001
+# ruff: noqa: PLR2004
 """Pruebas sin red del informe ejecutivo con datos sintéticos."""
 
 import datetime as dt
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 
 import icechunk
 import numpy as np
 import polars as pl
 import pytest
+import yaml
 import zarr
 
 from predico50hz.ingest.dynamical.bronze import init_pos, n_init
@@ -19,71 +21,89 @@ from predico50hz.report.build import _variables, build, build_data, fill, fmt_es
 from predico50hz.report.paths import Paths
 
 REPO = Path(__file__).resolve().parents[2]
-PLAN_MD = """# Plan
-
-**Versión 1.2 · 16 de octubre de 2026**
-
-## 1. Calendario y puertas de decisión
-
-| Fecha | Hito | Puerta |
-|---|---|---|
-| 17 oct | ✅ Etapas 0 y 1 | Variables verificadas |
-| 22 oct | 🔄 Etapa 2 | **G0**: 7 días sin fallos |
-| 13–24 nov | **Fase 2** | Fuera de este documento |
-| **1 dic** | **Primer mes de liga** | |
-
-**Reglas de corte:**
-- Si G1 no se supera, el inicio pasa a enero.
-
-## 3. Features
-
-### F1 — Ingesta
-
-**Tareas**
-- F1.1 ✅ Lector → `src/x.py`
-- F1.2 🟡 Relleno
-- F1.3 Respaldo
-
-### F2 — Datos
-
-- F2.1 ✅ Token
-- F2.2 ✅ Generación
-
-### F3 — Variables
-
-- F3.1 Uniones
-
-### F8 — Calidad
-
-- 🟡 Tests en CI
-"""
+GH_MILESTONES = [
+    {"number": 2, "title": "2 · Modelo v0.1", "due_on": "2026-10-29T00:00:00Z",
+     "open_issues": 2, "closed_issues": 0, "state": "open"},
+    {"number": 1, "title": "1 · G0 · Archivo diario estable", "due_on": "2026-10-22T00:00:00Z",
+     "open_issues": 1, "closed_issues": 2, "state": "open"},
+    {"number": 9, "title": "9 · Después del 1 dic", "due_on": None,
+     "open_issues": 1, "closed_issues": 0, "state": "open"},
+]  # fmt: skip
 
 
-def test_plan_blocks_and_status() -> None:
-    blocks = {b["id"]: b for b in plan.blocks(PLAN_MD.splitlines())}
-    assert blocks["F1"]["status"] == "progress"
-    assert (blocks["F1"]["done"], blocks["F1"]["partial"], blocks["F1"]["pending"]) == (1, 1, 1)
-    assert blocks["F2"]["status"] == "done"
-    assert blocks["F3"]["status"] == "pending"
-    assert blocks["F8"]["status"] == "progress"  # sin tareas F8.x: se lee la viñeta marcada
+def _gh_issue(n: int, title: str, labels: list[str], ms: int, state: str = "open", **kw: Any):
+    return {
+        "number": n,
+        "title": title,
+        "state": state,
+        "labels": [{"name": x} for x in labels],
+        "milestone": {"number": ms},
+        "body": f"texto\n<!-- backlog:{kw.pop('mark', 'x')} -->",
+        **kw,
+    }
 
 
-def test_plan_milestones_rules_and_countdown(tmp_path: Path) -> None:
-    f = tmp_path / "PLAN.md"
-    f.write_text(PLAN_MD, "utf-8")
-    p = plan.parse_plan(f, dt.date(2026, 10, 16))
+GH_ISSUES = [
+    _gh_issue(1, "G0: 7 días seguidos", ["tipo:puerta"], 1, mark="g0"),
+    _gh_issue(23, "F1.4 · Etapa 3", ["tipo:epic"], 2, mark="f1.4",
+              sub_issues_summary={"total": 3, "completed": 1, "percent_completed": 33}),
+    _gh_issue(4, "Operación diaria", ["tipo:epic"], 1, "closed", mark="ops",
+              sub_issues_summary={"total": 3, "completed": 3, "percent_completed": 100}),
+    _gh_issue(5, "Epic vacía", ["tipo:epic"], 1, sub_issues_summary={"total": 0, "completed": 0}),
+    {"number": 6, "title": "PR", "state": "open", "labels": [], "pull_request": {}},
+]  # fmt: skip
+
+
+def _fake_gh(endpoint: str) -> list[dict[str, Any]]:
+    return GH_MILESTONES if "/milestones" in endpoint else GH_ISSUES
+
+
+def _boom(endpoint: str) -> list[dict[str, Any]]:
+    raise OSError("sin red")
+
+
+NOW = dt.datetime(2026, 10, 20, 12, tzinfo=dt.UTC)
+LABELS = yaml.safe_load((REPO / "report" / "labels.yaml").read_text("utf-8"))
+
+
+def test_plan_from_github_milestones_gates_and_blocks(tmp_path: Path) -> None:
+    cache = tmp_path / "data" / "report" / "github_plan.json"
+    raw = plan.load(cache, NOW, fetch=_fake_gh)
+    p = plan.build_plan(raw, LABELS, NOW.date())
     assert p is not None
+    assert p["source"] == {"kind": "github", "fetched": "2026-10-20T12:00:00+00:00"}
     ms = p["milestones"]
-    assert [m["date"] for m in ms] == ["2026-10-17", "2026-10-22", "2026-11-13", "2026-12-01"]
-    assert ms[2]["end"] == "2026-11-24"
+    assert [m["date"] for m in ms] == ["2026-10-17", "2026-10-22", "2026-10-29", "2026-12-01"]
     assert [m["status"] for m in ms] == ["done", "progress", "pending", "pending"]
+    assert ms[1]["gate"] == "G0"
+    assert (ms[1]["closed"], ms[1]["total"]) == (2, 3)
     assert [g["gate"] for g in p["gates"]] == ["G0"]
-    assert p["days_to_league"] == 46
-    assert p["rules"] == ["Si G1 no se supera, el inicio pasa a enero."]
+    assert p["days_to_league"] == 42
+    assert p["rules"] == LABELS["rules"]
+    blocks = {b["title"]: b for b in p["blocks"]}  # la épica sin sub-issues y el PR no cuentan
+    assert set(blocks) == {"Histórico meteorológico completo", "Operación diaria de la descarga"}
+    b = blocks["Histórico meteorológico completo"]
+    assert (b["id"], b["status"], b["done"], b["pending"]) == ("F1.4", "progress", 1, 2)
+    assert blocks["Operación diaria de la descarga"]["status"] == "done"
+    assert {s["id"]: s["status"] for s in p["stages"]} == {
+        "0": "done", "1": "done", "2": "done", "3": "progress",
+    }  # fmt: skip
+    assert cache.is_file()
 
 
-def test_plan_missing_file_gives_none(tmp_path: Path) -> None:
-    assert plan.parse_plan(tmp_path / "nada.md", dt.date(2026, 10, 16)) is None
+def test_plan_falls_back_to_cache_then_none(tmp_path: Path) -> None:
+    cache = tmp_path / "github_plan.json"
+    assert plan.load(cache, NOW, fetch=_boom) is None
+    assert plan.build_plan(None, LABELS, NOW.date()) is None
+    plan.load(cache, NOW, fetch=_fake_gh)
+    later = NOW + dt.timedelta(days=1)
+    for kw in ({"fetch": _boom}, {"offline": True, "fetch": _boom}):
+        raw = plan.load(cache, later, **kw)
+        assert raw is not None
+        assert raw["source"] == "cache"
+        assert raw["fetched"] == "2026-10-20T12:00:00+00:00"
+    p = plan.build_plan(raw, LABELS, later.date())
+    assert p["source"]["kind"] == "cache"
 
 
 def test_cluster_names() -> None:
@@ -110,7 +130,6 @@ def _write(df: pl.DataFrame, path: Path) -> None:
 
 
 def _synthetic_root(root: Path) -> None:
-    (root / "PLAN.md").write_text(PLAN_MD, "utf-8")
     shutil.copytree(
         REPO / "report", root / "report", ignore=shutil.ignore_patterns("index.html", "*.json")
     )
@@ -219,10 +238,10 @@ def test_full_build_embeds_data_and_loads_nothing_external(tmp_path: Path) -> No
     _synthetic_root(tmp_path)
     out = tmp_path / "report" / "index.html"
     paths = Paths(root=tmp_path, nwp_bronze=tmp_path / "no-nas", mastr_raw=tmp_path / "no-nas")
-    build(paths, out, now=dt.datetime(2026, 10, 16, 12, tzinfo=dt.UTC))
+    build(paths, out, now=dt.datetime(2026, 10, 16, 12, tzinfo=dt.UTC), offline=True)
     html = out.read_text("utf-8")
     assert "window.REPORT_DATA" in html
-    data = build_data(paths, dt.datetime(2026, 10, 16, 12, tzinfo=dt.UTC))
+    data = build_data(paths, dt.datetime(2026, 10, 16, 12, tzinfo=dt.UTC), fetch=_fake_gh)
     assert data["zone"]["n_turbines"] == 3
     assert data["plan"]["days_to_league"] == 46
     assert data["volumes"]["nwp"]["bronze"] is None  # NAS ausente: no falla
@@ -238,7 +257,10 @@ def test_build_without_any_data_still_renders(tmp_path: Path) -> None:
     )
     paths = Paths(root=tmp_path, nwp_bronze=tmp_path / "x", mastr_raw=tmp_path / "x")
     out = build(
-        paths, tmp_path / "out" / "index.html", now=dt.datetime(2026, 10, 16, tzinfo=dt.UTC)
+        paths,
+        tmp_path / "out" / "index.html",
+        now=dt.datetime(2026, 10, 16, tzinfo=dt.UTC),
+        offline=True,
     )
     html = out.read_text("utf-8")
     assert '"zone":null' in html
@@ -411,7 +433,10 @@ def test_backtest_chapter_empty_state_and_template(tmp_path: Path) -> None:
         REPO / "report", tmp_path / "report", ignore=shutil.ignore_patterns("index.html", "*.json")
     )
     out = build(
-        paths, tmp_path / "out" / "index.html", now=dt.datetime(2026, 10, 16, tzinfo=dt.UTC)
+        paths,
+        tmp_path / "out" / "index.html",
+        now=dt.datetime(2026, 10, 16, tzinfo=dt.UTC),
+        offline=True,
     )
     html = out.read_text("utf-8")
     assert '"backtest":null' in html

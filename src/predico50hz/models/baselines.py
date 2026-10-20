@@ -6,7 +6,7 @@
   solo Q50, en MW. Es SOLO benchmark; nunca entra en `predico50hz.features`.
 
 **Persistencia: fuera, a propósito.** Exige saber hasta qué hora hay generación publicada antes
-del cierre (15:00 de Berlín) y esa hora de publicación no está medida (PLAN F2.5/F2.7). Sin ella,
+del cierre (15:00 de Berlín) y esa hora de publicación no está medida (F2.5/F2.7). Sin ella,
 «lo de ayer» no se puede construir sin mirar al futuro o sin inventar un retraso.
 """
 

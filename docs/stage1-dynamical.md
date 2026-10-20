@@ -13,7 +13,7 @@ Paquete `src/predico50hz/ingest/dynamical/`, lanzado con `uv run python -m predi
 | `silver.py` | Bilineal por miembro en los centroides provisionales (reutiliza `bilinear` y `load_points` de `ingest/ifs/extract.py`), luego **velocidad por miembro** (100 m y 10 m) desde (u, v) ya interpolados, luego agregados del ensemble: `ctrl` (miembro 0), `mean`, `std` (muestral, ddof=1), `p10`, `p50`, `p90`. 12 variables × 6 estadísticos = 72 columnas más claves; 104 filas por pasada (8 puntos × 13 pasos). Parquet zstd en `data/silver/ifs_ens_points/init_date=AAAA-MM-DD/part-0.parquet`; escritura atómica |
 | `pipeline.py` | `read_stage` (lectura + MB de red) y `write_stage` (bronce, plata, hashes) |
 
-Para los puntos de mar el interpolado es el mismo (no hay máscara tierra-mar en dynamical; sigue pendiente, PLAN 2.2). El CLI admite `--skip-existing` (reanudar) y `--init-workers N` (pasadas leídas a la vez; la escritura sigue siendo secuencial y en orden).
+Para los puntos de mar el interpolado es el mismo (no hay máscara tierra-mar en dynamical; sigue pendiente, ADR 0003). El CLI admite `--skip-existing` (reanudar) y `--init-workers N` (pasadas leídas a la vez; la escritura sigue siendo secuencial y en orden).
 
 ## 2. Métricas (7 pasadas, `--workers 5`, secuencial)
 
@@ -75,7 +75,7 @@ Cada relanzamiento crea un commit nuevo (se reescriben los chunks) y el reposito
 - **Escritura en NFS** (`/mnt/data` es `nas:/mnt/main/share/data`): icechunk avisa de que el almacenamiento local no es seguro para commits concurrentes; el pipeline usa un único escritor. Hay que mantenerlo así o pasar a un almacenamiento de objetos.
 - **Centroides provisionales** (`config/centroids_provisional.yaml`, eliminado): solo valían para validar la cadena; sustituidos por los de MaStR (§7).
 - **Sin cambios en `ingest/ifs/`**; los 28 tests unitarios pasan (16 previos + 12 nuevos en `tests/unit/test_dynamical_ingest.py`). `ruff` y `pyright` limpios sobre el paquete nuevo.
-- **No verificado:** coherencia con el GRIB `enfo` (PLAN 2.4.3) y el ciclo de IFS por pasada (2.4.4); quedan para etapas siguientes.
+- **No verificado:** coherencia con el GRIB `enfo` y el ciclo de IFS por pasada; están en el backlog de GitHub.
 
 
 ## 7. Reconstrucción de la plata desde el bronce

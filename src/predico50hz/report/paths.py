@@ -9,7 +9,7 @@ from predico50hz.ingest.mastr.config import RAW_ROOT
 
 PACKAGE = Path(__file__).parent
 VENDOR = PACKAGE / "vendor"
-LEAGUE_START = (2026, 12, 1)  # primer mes de liga (PLAN.md §1)
+LEAGUE_START = (2026, 12, 1)  # primer mes de liga
 
 
 @dataclass(frozen=True)
@@ -19,8 +19,9 @@ class Paths:
     mastr_raw: Path = Path(RAW_ROOT)
 
     @property
-    def plan(self) -> Path:
-        return self.root / "PLAN.md"
+    def plan_cache(self) -> Path:
+        """Última respuesta buena de GitHub (hitos e issues)."""
+        return self.root / "data" / "report" / "github_plan.json"
 
     @property
     def silver(self) -> Path:

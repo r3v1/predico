@@ -1,190 +1,215 @@
 # pyright: basic, reportArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
-# ruff: noqa: PLR2004, RUF001
-"""Estado del proyecto leído de las marcas de `PLAN.md` (✅ hecho, 🔄 en curso, 🟡 parcial)."""
+# ruff: noqa: RUF001
+"""Estado del proyecto leído de GitHub (milestones e issues), con caché local."""
 
 import datetime as dt
+import json
 import re
+import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from predico50hz.report.paths import LEAGUE_START
+from predico50hz.report.util import read_json
 
-MARKS = {"✅": "done", "🔄": "progress", "🟡": "partial"}
-MONTHS = {
-    m: i + 1
-    for i, m in enumerate(
-        ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
-    )
-}
-FRIENDLY_BLOCKS = {
-    "F1": "Datos meteorológicos",
-    "F2": "Producción real, precios y parques",
-    "F3": "Variables del modelo",
-    "F4": "Banco de pruebas",
-    "F5": "Referencias de comparación",
-    "F6": "Modelo principal",
-    "F7": "Modelos de IA preentrenados",
-    "F8": "Calidad e ingeniería",
-    "F9": "Cierre de la fase",
-}
-MARK_RE = re.compile("[" + "".join(MARKS) + "]")
-TASK_RE = re.compile(r"^- (F\d\.\d+)\b\s*(" + "|".join(MARKS) + r")?")
-BULLET_RE = re.compile(r"^- (" + "|".join(MARKS) + r")\s*(.*)$")
+REPO = "r3v1/predico"
+TIMEOUT_S = 20
+MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+BACKLOG_RE = re.compile(r"<!--\s*backlog:(\S+?)\s*-->")
+Fetch = Callable[[str], list[dict[str, Any]]]
 
 
-def clean(text: str, *, cut: bool = True) -> str:
-    """Quita el marcado Markdown y, si `cut`, las referencias a ficheros (`→ ...`)."""
-    text = text.split(" → ", maxsplit=1)[0] if cut else text
-    text = re.sub(r"[*`]", "", text)
-    return MARK_RE.sub("", text).strip()
-
-
-def _mark(text: str) -> str:
-    m = MARK_RE.search(text)
-    return MARKS[m.group()] if m else "pending"
-
-
-def _table_rows(lines: list[str]) -> list[list[str]]:
-    rows: list[list[str]] = []
-    for ln in lines:
-        if ln.startswith("|") and not re.match(r"^\|[\s|:-]+\|$", ln):
-            rows.append([c.strip() for c in ln.strip().strip("|").split("|")])
-    return rows
-
-
-def _section(lines: list[str], pattern: str) -> list[str]:
-    """Líneas de la sección cuyo encabezado casa con `pattern`, hasta el siguiente encabezado."""
-    for i, ln in enumerate(lines):
-        if re.match(pattern, ln):
-            level = len(ln) - len(ln.lstrip("#"))
-            out: list[str] = []
-            for nxt in lines[i + 1 :]:
-                if nxt.startswith("#") and len(nxt) - len(nxt.lstrip("#")) <= level:
-                    break
-                out.append(nxt)
-            return out
-    return []
-
-
-def _parse_date(cell: str, year: int) -> tuple[dt.date, dt.date] | None:
-    m = re.search(r"(\d{1,2})(?:\s*[–-]\s*(\d{1,2}))?\s+([a-z]{3})", clean(cell).lower())
-    if not m or m.group(3) not in MONTHS:
-        return None
-    month = MONTHS[m.group(3)]
-    start = dt.date(year, month, int(m.group(1)))
-    return start, dt.date(year, month, int(m.group(2) or m.group(1)))
-
-
-def milestones(lines: list[str], year: int) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for row in _table_rows(_section(lines, r"^## 1\.")):
-        if len(row) < 3:
+def gh_api(endpoint: str) -> list[dict[str, Any]]:
+    """GET paginado con `gh api`; lanza si no hay `gh`, red o autenticación."""
+    out = subprocess.run(
+        ["gh", "api", "--paginate", endpoint],
+        capture_output=True,
+        text=True,
+        timeout=TIMEOUT_S,
+        check=True,
+    ).stdout
+    dec, i, items = json.JSONDecoder(), 0, []
+    while i < len(out):  # `--paginate` concatena una lista JSON por página
+        if out[i].isspace():
+            i += 1
             continue
-        dates = _parse_date(row[0], year)
-        if dates is None:
+        page, i = dec.raw_decode(out, i)
+        items += page
+    return items
+
+
+def reduce(milestones: list[dict[str, Any]], issues: list[dict[str, Any]]) -> dict[str, Any]:
+    """Respuesta de GitHub reducida a lo que usa el informe (es lo que se guarda en la caché)."""
+    out_issues = []
+    for i in issues:
+        if "pull_request" in i:
             continue
-        gate = re.search(r"\b(G\d)\b", row[2])
-        out.append(
+        mark = BACKLOG_RE.search(i.get("body") or "")
+        sub = i.get("sub_issues_summary") or {}
+        out_issues.append(
             {
-                "date": dates[0].isoformat(),
-                "end": dates[1].isoformat(),
-                "key": clean(row[0]),
-                "label": clean(row[1]),
-                "gate": gate.group(1) if gate else None,
-                "gate_text": clean(row[2]).split(":", 1)[-1].strip() if row[2] else "",
-                "status": _mark(row[1]),
+                "number": i["number"],
+                "title": i["title"],
+                "state": i["state"],
+                "labels": [lb["name"] for lb in i.get("labels", [])],
+                "milestone": (i.get("milestone") or {}).get("number"),
+                "backlog": mark.group(1) if mark else None,
+                "sub_total": sub.get("total", 0),
+                "sub_done": sub.get("completed", 0),
             }
         )
-    return out
+    return {
+        "milestones": [
+            {
+                "number": m["number"],
+                "title": m["title"],
+                "due_on": m.get("due_on"),
+                "open": m["open_issues"],
+                "closed": m["closed_issues"],
+                "state": m["state"],
+            }
+            for m in milestones
+        ],
+        "issues": out_issues,
+    }
 
 
-def rules(lines: list[str]) -> list[str]:
-    """Viñetas bajo «Reglas de corte» del calendario."""
-    sec = _section(lines, r"^## 1\.")
-    out: list[str] = []
-    on = False
-    for ln in sec:
-        if "Reglas de corte" in ln:
-            on = True
-        elif on and ln.startswith("- "):
-            out.append(clean(ln[2:], cut=False))
-        elif on and ln.startswith("**") and out:
-            break
-    return out
-
-
-def stages(lines: list[str]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for row in _table_rows(_section(lines, r"^### 2\.5")):
-        m = re.match(r"^(?:(" + "|".join(MARKS) + r")\s*)?\*\*(\d)\*\*", row[0])
-        if m:
-            out.append(
-                {
-                    "id": m.group(2),
-                    "status": MARKS.get(m.group(1) or "", "pending"),
-                    "what": clean(row[1], cut=False) if len(row) > 1 else "",
-                }
+def load(
+    cache: Path, now: dt.datetime, *, offline: bool = False, fetch: Fetch = gh_api
+) -> dict[str, Any] | None:
+    """GitHub → caché → `None`. Añade `source` («github» o «cache») y `fetched` (ISO)."""
+    if not offline:
+        try:
+            raw = reduce(
+                fetch(f"repos/{REPO}/milestones?state=all&per_page=100"),
+                fetch(f"repos/{REPO}/issues?state=all&per_page=100"),
             )
-    return out
+            raw["fetched"] = now.isoformat(timespec="seconds")
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(raw, ensure_ascii=False), "utf-8")
+            return {**raw, "source": "github"}
+        except OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError:
+            pass
+    raw = read_json(cache)
+    if isinstance(raw, dict) and "milestones" in raw and "issues" in raw:
+        return {**raw, "source": "cache"}
+    return None
 
 
-def blocks(lines: list[str]) -> list[dict[str, Any]]:
-    """Un bloque por encabezado `### F<n> — ...`, con el recuento de sus tareas por estado."""
+def _status(closed: int, total: int, *, state: str = "open") -> str:
+    if state == "closed" or (total and closed == total):
+        return "done"
+    return "progress" if closed else "pending"
+
+
+def _short(d: dt.date) -> str:
+    return f"{d.day} {MONTHS[d.month - 1]}"
+
+
+def _milestones(raw: dict[str, Any], labels: dict[str, Any]) -> list[dict[str, Any]]:
+    over = labels.get("milestones") or {}
     out: list[dict[str, Any]] = []
-    for i, ln in enumerate(lines):
-        h = re.match(r"^### (F\d) — (.+)$", ln)
-        if not h:
-            continue
-        counts = dict.fromkeys(("done", "progress", "partial", "pending"), 0)
-        bullets = dict(counts)
-        for nxt in lines[i + 1 :]:
-            if nxt.startswith(("## ", "### ")):
-                break
-            t = TASK_RE.match(nxt)
-            if t:
-                counts[MARKS.get(t.group(2) or "", "pending")] += 1
-            b = BULLET_RE.match(nxt)
-            if b and not t:
-                bullets[MARKS[b.group(1)]] += 1
-        total = sum(counts.values())
-        marked = sum(v for k, v in (counts if total else bullets).items() if k != "pending")
-        use = counts if total else bullets
-        if total and counts["done"] == total:
-            status = "done"
-        elif marked or any(use[k] for k in ("done", "progress", "partial")):
-            status = "progress"
-        else:
-            status = "pending"
+    for p in labels.get("past_milestones") or []:
+        d = dt.date.fromisoformat(str(p["date"]))
         out.append(
             {
-                "id": h.group(1),
-                "title": FRIENDLY_BLOCKS.get(h.group(1), clean(h.group(2))),
-                "status": status,
+                "date": d.isoformat(),
+                "end": d.isoformat(),
+                "key": _short(d),
+                "label": p["label"],
+                "gate": None,
+                "gate_text": p.get("detail", ""),
+                "status": "done",
+            }
+        )
+    issues = raw["issues"]
+    for m in sorted(raw["milestones"], key=lambda m: int(re.match(r"\d+", m["title"]).group())):
+        n = int(re.match(r"\d+", m["title"]).group())
+        o = over.get(n) or over.get(str(n)) or {}
+        end = (
+            dt.datetime.fromisoformat(m["due_on"].replace("Z", "+00:00")).date()
+            if m.get("due_on")
+            else dt.date(*LEAGUE_START)
+        )
+        start = dt.date.fromisoformat(str(o["start"])) if o.get("start") else end
+        total = m["open"] + m["closed"]
+        gate = next(
+            (
+                g.group(1)
+                for i in issues
+                if i["milestone"] == n and "tipo:puerta" in i["labels"]
+                for g in [re.match(r"(G\d)\b", i["title"])]
+                if g
+            ),
+            None,
+        )
+        out.append(
+            {
+                "date": start.isoformat(),
+                "end": end.isoformat(),
+                "key": _short(start) if start == end else f"{start.day}–{_short(end)}",
+                "label": o.get("label", re.sub(r"^\d+\s*·\s*", "", m["title"])),
+                "gate": gate,
+                "gate_text": o.get("detail", ""),
+                "status": _status(m["closed"], total, state=m["state"]),
+                "closed": m["closed"],
                 "total": total,
-                **{k: counts[k] for k in ("done", "progress", "partial")},
-                "pending": counts["pending"],
             }
         )
     return out
 
 
-def parse_plan(path: Path, today: dt.date) -> dict[str, Any] | None:
-    try:
-        lines = path.read_text("utf-8").splitlines()
-    except OSError:
+def _epics(raw: dict[str, Any], labels: dict[str, Any]) -> list[dict[str, Any]]:
+    titles = labels.get("blocks") or {}
+    out: list[dict[str, Any]] = []
+    for i in raw["issues"]:
+        if "tipo:epic" not in i["labels"] or not i["sub_total"]:
+            continue
+        done, total = i["sub_done"], i["sub_total"]
+        tag = re.match(r"F\d(?:\.\d)?", i["title"])
+        out.append(
+            {
+                "id": tag.group() if tag else "",
+                "title": titles.get(i["backlog"], re.sub(r"^F\d(?:\.\d)?\s*·\s*", "", i["title"])),
+                "status": _status(done, total, state=i["state"]),
+                "total": total,
+                "done": done,
+                "progress": 0,
+                "partial": 0,
+                "pending": total - done,
+            }
+        )
+    return out
+
+
+def _stages(raw: dict[str, Any], labels: dict[str, Any]) -> list[dict[str, Any]]:
+    by_mark = {i["backlog"]: i for i in raw["issues"] if i["backlog"]}
+    out: list[dict[str, Any]] = []
+    for sid, s in (labels.get("stages") or {}).items():
+        status = s.get("status", "pending")
+        epic = by_mark.get(s.get("derive"))
+        if epic:
+            status = _status(epic["sub_done"], epic["sub_total"], state=epic["state"])
+        out.append({"id": str(sid), "status": status, "what": s["what"]})
+    return out
+
+
+def build_plan(
+    raw: dict[str, Any] | None, labels: dict[str, Any], today: dt.date
+) -> dict[str, Any] | None:
+    """Dict del capítulo 1 a partir de la respuesta reducida de GitHub y de `labels.yaml`."""
+    if raw is None:
         return None
-    ver = next((ln for ln in lines if ln.startswith("**Versión")), "")
-    y = re.search(r"\b(20\d\d)\b", ver)
-    year = int(y.group(1)) if y else today.year
-    ms = milestones(lines, year)
+    ms = _milestones(raw, labels)
     league = dt.date(*LEAGUE_START)
     return {
-        "version": clean(ver).split("·")[0].replace("Versión", "").strip(),
+        "source": {"kind": raw["source"], "fetched": raw.get("fetched")},
         "milestones": ms,
         "gates": [m for m in ms if m["gate"]],
-        "rules": rules(lines),
-        "stages": stages(lines),
-        "blocks": blocks(lines),
+        "rules": list(labels.get("rules") or []),
+        "stages": _stages(raw, labels),
+        "blocks": _epics(raw, labels),
         "league_start": league.isoformat(),
         "days_to_league": (league - today).days,
     }

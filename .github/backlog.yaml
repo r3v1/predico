@@ -1,0 +1,1178 @@
+# Semilla del backlog de Predico 50Hertz en GitHub (issues, sub-issues, «Blocked by» y milestones).
+#
+# Se carga con `uv run python scripts/sync_github_backlog.py` (idempotente: solo crea lo que falta;
+# nunca edita ni cierra lo que ya existe). Tras la carga inicial (20 oct 2026) la fuente de verdad del
+# trabajo pendiente es GitHub; este fichero solo sirve para sembrar trabajo nuevo en bloque.
+#
+# Cada issue lleva en el cuerpo la marca `<!-- backlog:<id> -->`, que el script usa para reconocerlo.
+# Campos: id, title, milestone (clave de `milestones`), labels, parent (id del padre; crea el
+# sub-issue), blocked_by (ids; crea la relación «Blocked by»), context, tasks, acceptance, refs.
+
+repo: r3v1/predico
+
+milestones:
+  g0:
+    title: "1 · G0 · Archivo diario estable"
+    due: 2026-10-22
+    description: >-
+      7 días seguidos sin fallos en nwp-daily y entsoe-daily (python -m predico50hz.orchestration status).
+  v01:
+    title: "2 · Modelo v0.1"
+    due: 2026-10-29
+    description: >-
+      LightGBM sin optimizar sobre los 13 meses de la etapa 2, con métricas registradas frente a las
+      cuatro referencias (persistencia, climatología, curva de potencia y operador).
+  g1:
+    title: "3 · G1 · Histórico completo y baseline"
+    due: 2026-11-05
+    description: >-
+      Etapa 3 completa y baseline en backtest. Puerta G1: RMSE del Q50 ≤ pronóstico del operador y
+      cobertura del 80 % entre 76 y 84 %. Regla de corte: si no se supera, el inicio pasa al 1 de enero.
+  v02:
+    title: "4 · G2 · Modelo final v0.2 y cierre"
+    due: 2026-11-12
+    description: >-
+      Modelo final optimizado, benchmark cerrado y puerta G2 (mejora sobre G1 confirmada en el periodo
+      reservado). Informe de cierre de la Fase 1 con la decisión 1 dic / 1 ene.
+  f2:
+    title: "5 · Producción"
+    due: 2026-11-24
+    description: >-
+      Definición y construcción del sistema de producción (13–24 nov): predicción diaria, envío a
+      Predico, orquestación, alertas y respaldo.
+  rodaje:
+    title: "6 · Rodaje y liga"
+    due: 2026-11-30
+    description: >-
+      25–30 nov: cero días perdidos y margen p95 ≥ 60 min antes del cierre. Primer mes de liga el 1 dic.
+  despues:
+    title: "9 · Después del 1 dic"
+    description: >-
+      Trabajo útil que no condiciona la entrada en liga. Aquí se mueve lo recortable si el calendario aprieta.
+
+labels:
+  "tipo:epic": {color: "5319e7", description: "Agrupa sub-issues de una misma feature"}
+  "tipo:puerta": {color: "b60205", description: "Puerta de decisión del calendario (G0, v0.1, G1, G2, rodaje)"}
+  "tipo:decisión": {color: "fbca04", description: "Hay que decidir algo y dejarlo escrito"}
+  "tipo:bug": {color: "d73a4a", description: "Algo no funciona como debería"}
+  "area:nwp": {color: "1d76db", description: "Ingesta y calidad de la previsión meteorológica (IFS ENS, enfo)"}
+  "area:entsoe": {color: "0e8a16", description: "Datos de ENTSO-E: generación, precio, pronóstico del operador"}
+  "area:variables": {color: "c2e0c6", description: "Tabla de variables (oro) y control de look-ahead"}
+  "area:modelo": {color: "0052cc", description: "Modelos, cuantiles, calibración y optimización"}
+  "area:backtest": {color: "bfdadc", description: "Marco de evaluación, métricas y referencias"}
+  "area:ops": {color: "006b75", description: "Operación diaria: jobs, systemd, Docker, Hetzner"}
+  "area:calidad": {color: "e4e669", description: "Tests, CI, contratos de datos y reproducibilidad"}
+  "area:producción": {color: "d93f0b", description: "Sistema de producción y envío a Predico (Fase 2)"}
+  "area:informe": {color: "f9d0c4", description: "Informe ejecutivo para negocio"}
+  "recortable": {color: "cccccc", description: "Primero en moverse si el calendario aprieta (ADR 0006)"}
+  "externo": {color: "000000", description: "Depende de un tercero"}
+
+issues:
+  # ── G0 · Archivo diario estable ─────────────────────────────────────────────────────────────
+  - id: g0
+    title: "G0: 7 días seguidos de archivo diario sin fallos"
+    milestone: g0
+    labels: ["tipo:puerta", "area:ops"]
+    context: >-
+      Primera puerta del calendario. Demuestra que la descarga diaria de la previsión meteorológica
+      (`nwp-daily`) y el archivo de ENTSO-E (`entsoe-daily`) funcionan solos, sin intervención, durante
+      una semana completa. Se comprueba en la VM de Hetzner con Docker, donde un día sin ejecución cuenta
+      como fallo. A 20 oct la racha va en 5/7 (16–20 oct en `ok`) y el margen de la NWP ronda los 282 min.
+      Los fallos puntuales de `entsoe-hourly` (HTTP 400 de ENTSO-E, recuperados a la hora siguiente) no
+      cuentan para G0.
+    tasks:
+      - "Racha 7/7 en `status` del servidor"
+      - "Evidencia exportada y archivada"
+      - "README e informe ejecutivo actualizados con G0 superada"
+    acceptance:
+      - "`python -m predico50hz.orchestration status` en el servidor muestra `G0 … superada` con racha 7/7"
+    refs:
+      - "`docs/f1.5-f2.7-operations.md` §8 (puerta G0) y §10 (despliegue en Hetzner)"
+      - "ADR 0005"
+
+  - id: ops-watch
+    title: "Vigilar la racha de G0 el 21 y 22 de octubre sin tocar el servidor"
+    milestone: g0
+    labels: ["area:ops"]
+    parent: g0
+    context: >-
+      Faltan dos días. Cualquier despliegue o reinicio del contenedor a mitad de la racha añade riesgo
+      sin aportar nada a G0, así que el servidor no se toca hasta que la puerta cierre.
+    tasks:
+      - "Consultar `status` cada mañana tras la ventana de `nwp-daily` (≈ 08:20 UTC) y de `entsoe-daily` (06:00 UTC)"
+      - "Si algún job falla: diagnóstico de solo lectura (logs del contenedor, `runs.jsonl`) y runbook `docs/runbooks/nwp-no-llega.md`"
+      - "No reconstruir la imagen ni reiniciar el contenedor hasta cerrar G0"
+    acceptance:
+      - "Racha 7/7 o, si se rompe, causa documentada y nueva fecha estimada de G0"
+    refs:
+      - "`docs/runbooks/nwp-no-llega.md`"
+
+  - id: ops-export
+    title: "Exportar y archivar la evidencia de G0"
+    milestone: g0
+    labels: ["area:ops", "area:informe"]
+    parent: g0
+    blocked_by: [ops-watch]
+    context: >-
+      Al cerrar G0 hay que guardar la prueba (estado, `runs.jsonl`, disponibilidad de la NWP, informes de
+      validación) antes de tocar nada en la VM.
+    tasks:
+      - "`python -m predico50hz.orchestration export` en el servidor y copiar el `.tar.gz` a local / NAS"
+      - "Cerrar el issue de la puerta G0 con la fecha y la ruta de la evidencia"
+      - "Entrada nueva en `report/changelog.yaml`, revisar `report/insights.yaml` y regenerar el informe"
+    acceptance:
+      - "El tarball de la evidencia está fuera de la VM y referenciado en `docs/f1.5-f2.7-operations.md` §11"
+    refs:
+      - "`docs/f1.5-f2.7-operations.md` §11 (`export`)"
+
+  # ── Operación diaria tras G0 ──────────────────────────────────────────────────────────────
+  - id: ops
+    title: "Operación diaria tras G0"
+    milestone: v01
+    labels: ["tipo:epic", "area:ops"]
+    context: >-
+      Lo pendiente de la operación diaria una vez demostrada G0: llevar al servidor los arreglos del 20 oct,
+      decidir el papel de la VM de Hetzner y mejorar el diagnóstico de fallos.
+    tasks:
+      - "Sub-issues de esta épica"
+
+  - id: ops-deploy
+    title: "Desplegar en Hetzner los arreglos de operación del 20 de octubre"
+    milestone: v01
+    labels: ["area:ops", "area:entsoe"]
+    parent: ops
+    blocked_by: [ops-export]
+    context: >-
+      El 20 oct se arregló en local el HTTP 400 intermitente de ENTSO-E (el cliente lo reintenta hasta 2
+      veces y el error final incluye el `<Reason>`). El servidor sigue con el código anterior. La espera de
+      red y los reintentos de systemd solo aplican al portátil.
+    tasks:
+      - "Actualizar el código en la VM y reconstruir la imagen (`docker/compose.yaml`)"
+      - "Comprobar que el contenedor arranca y que el siguiente `entsoe-hourly` sale `ok`"
+      - "A la semana: contar los 400 que han quedado recuperados por reintento (`retries` en los logs) y si alguno sigue fallando, anotar su `<Reason>`"
+    acceptance:
+      - "La imagen desplegada incluye el reintento de 400 y `status` no muestra fallos nuevos de `entsoe-hourly` por 400"
+    refs:
+      - "`src/predico50hz/ingest/entsoe/client.py`"
+      - "`docs/f1.5-f2.7-operations.md` §7 y §10"
+
+  - id: ops-vm
+    title: "Decidir qué hacer con la VM de Hetzner tras G0"
+    milestone: v01
+    labels: ["tipo:decisión", "area:ops"]
+    parent: ops
+    blocked_by: [ops-export]
+    context: >-
+      La VM se creó como efímera para demostrar G0. Pero es el único sitio que archiva sin huecos las
+      versiones de ENTSO-E (revisiones) y la hora real de disponibilidad de la NWP: el portátil se apaga y
+      ahí un día sin ejecución no se cuenta como fallo. Las medidas de `publication-times` también dependen
+      de no perder horas.
+    tasks:
+      - "Opciones: apagarla; mantenerla como archivo 24/7 hasta la Fase 2; o sustituirla por el sobremesa / TrueNAS"
+      - "Valorar coste mensual frente a lo que se pierde (revisiones de ENTSO-E, medidas horarias)"
+      - "Si se mantiene: plan de copia de `data/` hacia el NAS"
+      - "Dejar la decisión escrita en `docs/f1.5-f2.7-operations.md` §10"
+    acceptance:
+      - "Decisión documentada y aplicada (VM apagada o con copia de datos programada)"
+    refs:
+      - "`deploy/hetzner/bootstrap.sh`"
+
+  - id: ops-joberror
+    title: "El motivo de los fallos de los jobs llega vacío a `status`"
+    milestone: v01
+    labels: ["tipo:bug", "area:ops"]
+    parent: ops
+    context: >-
+      `status` muestra `JobError: entsoe prices terminó con código 1:` sin nada detrás de los dos puntos.
+      `_run_cli` redirige stderr a un `_Tee` para guardar las últimas líneas, pero la salida con el error
+      real no pasa por ahí (el CLI de ENTSO-E escribe el resumen JSON con `errors` en stdout), así que
+      `tail` sale vacío. Para ver la causa hubo que leer los logs del contenedor.
+    tasks:
+      - "Capturar también stdout, o hacer que el CLI devuelva/emita sus `errors` en stderr"
+      - "Test que reproduzca un CLI que falla y compruebe que el motivo llega a `runs.jsonl` y a `status`"
+    acceptance:
+      - "Un fallo de `entsoe-hourly` muestra en `status` el error concreto (p. ej. `HTTP 400: <Reason>…`), sin token"
+    refs:
+      - "`src/predico50hz/orchestration/jobs.py` (`_Tee`, `_run_cli`)"
+
+  # ── v0.1 · LightGBM extremo a extremo ────────────────────────────────────────────────────────
+  - id: v01
+    title: "v0.1: LightGBM sin optimizar, extremo a extremo, frente a las cuatro referencias"
+    milestone: v01
+    labels: ["tipo:puerta", "area:modelo"]
+    blocked_by: [f6-lgbm, f5-persistencia, f5-mlflow]
+    context: >-
+      Primer modelo de verdad sobre los 13 meses de la etapa 2 (sep 2025 – oct 2026), evaluado con el
+      mismo marco de backtest que las referencias. No tiene que ganar al operador todavía: tiene que
+      funcionar de punta a punta y dejar las métricas registradas.
+    tasks:
+      - "LightGBM v0.1 evaluado en los 8 pliegues de validación"
+      - "Cuatro referencias evaluadas con el mismo módulo de métricas: persistencia, climatología, curva de potencia y operador"
+      - "Todo registrado en MLflow"
+      - "Actualizar README, `report/model.yaml`, `report/changelog.yaml` y regenerar el informe"
+    acceptance:
+      - "Scorecard con LightGBM y las cuatro referencias en `data/backtest/report/` y en el informe ejecutivo"
+      - "Ejecuciones visibles en MLflow"
+    refs:
+      - "ADR 0005, ADR 0010 (partición de la v0.1), ADR 0014, ADR 0017"
+      - "`docs/f4-backtest.md`"
+
+  - id: f2.5
+    title: "F2.5 · Horas de publicación de ENTSO-E (operador, precio y generación)"
+    milestone: v01
+    labels: ["tipo:epic", "area:entsoe"]
+    context: >-
+      Tres decisiones del plan dependen de saber cuándo publica ENTSO-E cada dato: si el precio
+      day-ahead puede ser variable, contra qué versión del pronóstico del operador hay que compararse, y
+      hasta qué hora hay generación real para la persistencia. `entsoe-hourly` mide precio y pronóstico
+      cada hora desde el 16 oct.
+    tasks:
+      - "Sub-issues de esta épica"
+    refs:
+      - "`docs/f2-entsoe.md` §3"
+      - "`docs/f1.5-f2.7-operations.md` §4 (`publication-times`)"
+
+  - id: f2.5-analisis
+    title: "Analizar `publication-times` con la primera semana de medidas"
+    milestone: v01
+    labels: ["area:entsoe"]
+    parent: f2.5
+    context: >-
+      `publication-times` da, por cada día de cierre, la primera hora en que vimos completos el precio
+      day-ahead y el pronóstico del operador. La resolución es horaria y es una cota superior. El 16 oct, a
+      las 13:20 UTC del día del cierre, el pronóstico del operador aún no estaba publicado.
+    tasks:
+      - "Ejecutar `publication-times` sobre los datos del servidor (no los del portátil, que tienen huecos)"
+      - "Por dataset: hora mediana, peor caso y distribución frente al cierre (13:00/14:00 UTC)"
+      - "Documentar el resultado en `docs/f2-entsoe.md` §3"
+    acceptance:
+      - "Tabla con la hora de publicación del precio y del pronóstico del operador para ≥ 7 cierres, con su margen frente al cierre"
+    refs:
+      - "`data/ops/publication_times.json`"
+
+  - id: f2.5-generacion
+    title: "Medir hasta qué hora hay generación real publicada antes del cierre"
+    milestone: v01
+    labels: ["area:entsoe", "area:backtest"]
+    parent: f2.5
+    context: >-
+      La referencia de persistencia (F5) necesita saber cuál es el último cuarto de hora de generación real
+      que ya está publicado en el momento del cierre. Hoy `entsoe-hourly` solo descarga precio y
+      pronóstico, así que no hay medida. Empezar cuanto antes: hacen falta varios días de datos.
+    tasks:
+      - "Añadir la generación (B18 + B19) a la medición horaria, o una consulta ligera de su último paso publicado"
+      - "Extender `publication-times` (o un informe hermano) con el retraso de la generación respecto al tiempo real"
+      - "Desplegar en el servidor junto con `ops-deploy` y dejar correr ≥ 7 días"
+    acceptance:
+      - "Retraso típico y peor caso de la generación publicada a la hora del cierre, documentados en `docs/f2-entsoe.md`"
+    refs:
+      - "`docs/f4-backtest.md` §9 (persistencia fuera)"
+
+  - id: f2.5-precio
+    title: "Decidir si el precio day-ahead entra como variable"
+    milestone: v01
+    labels: ["tipo:decisión", "area:entsoe", "area:variables"]
+    parent: f2.5
+    blocked_by: [f2.5-analisis]
+    context: >-
+      El precio day-ahead de D+1 es una señal de curtailment (precios negativos ⇒ parques parados). La
+      subasta SDAC publica hacia las 12:45 CET, muy cerca del cierre de Predico (15:00 CET). Solo puede
+      usarse si su hora de publicación medida deja margen suficiente; si no, se podría usar el de D.
+    tasks:
+      - "Con el análisis de `publication-times`, decidir: precio de D+1, precio de D o ninguno"
+      - "Documentar la decisión y el margen en `docs/f3-features.md` §9 (ADR nuevo si cambia lo decidido en el ADR 0009)"
+    acceptance:
+      - "Decisión escrita; si es afirmativa, el issue de la variable de precio queda desbloqueado; si es negativa, se cierra como no planificado"
+    refs:
+      - "ADR 0009, ADR 0017"
+
+  - id: f5
+    title: "F5 · Referencias completas y registradas en MLflow"
+    milestone: v01
+    labels: ["tipo:epic", "area:backtest"]
+    context: >-
+      Ya están evaluadas el operador (RMSE Q50 931 MW), la curva de potencia (1 197 MW) y la climatología
+      (3 406 MW) en validación dic 2025 – jul 2026. Faltan la persistencia y el registro en MLflow.
+    tasks:
+      - "Sub-issues de esta épica"
+    acceptance:
+      - "Las cuatro referencias evaluadas con el mismo módulo de métricas y registradas en MLflow"
+    refs:
+      - "ADR 0017"
+      - "`src/predico50hz/models/baselines.py`"
+
+  - id: f5-persistencia
+    title: "Referencia de persistencia"
+    milestone: v01
+    labels: ["area:backtest"]
+    parent: f5
+    blocked_by: [f2.5-generacion]
+    context: >-
+      Persistencia = repetir para D+1 la última generación conocida antes del cierre (o el perfil del
+      último día disponible). Sin saber hasta qué hora hay datos publicados al cierre sería una referencia
+      tramposa.
+    tasks:
+      - "Implementarla como un `Model` más en `models/baselines.py`, usando solo generación con hora de publicación < cierre"
+      - "Test anti look-ahead específico"
+      - "Evaluarla en los 8 pliegues y añadirla al scorecard"
+    acceptance:
+      - "Persistencia en el scorecard con RMSE, Winkler y cobertura (si da cuantiles)"
+    refs:
+      - "`docs/f4-backtest.md` §9"
+
+  - id: f5-mlflow
+    title: "Adaptador MLflow para el registro de ejecuciones"
+    milestone: v01
+    labels: ["area:backtest", "area:calidad"]
+    parent: f5
+    context: >-
+      El marco guarda cada ejecución como `RunRecord` a través de sumideros con un método `save(record)`.
+      El adaptador MLflow son unas 10 líneas. STACK.md fija MLflow como seguimiento de experimentos.
+    tasks:
+      - "Sumidero MLflow: run por `run_id`, parámetros, métricas por pliegue y totales, artefactos (predicciones, PNG)"
+      - "Etiquetar cada run con la versión de datos (snapshot de Icechunk y versión Delta del oro)"
+      - "Registrar las referencias ya evaluadas"
+      - "Documentar cómo abrir la UI en `docs/f4-backtest.md` §7"
+    acceptance:
+      - "`mlflow ui` muestra las referencias con sus métricas y la versión de datos"
+    refs:
+      - "`src/predico50hz/evaluation/store.py`"
+      - "`docs/f4-backtest.md` §7"
+
+  - id: f6
+    title: "F6 · LightGBM con cuantiles, calibración y optimización"
+    milestone: v02
+    labels: ["tipo:epic", "area:modelo"]
+    context: >-
+      Q50 con pérdida cuadrática (se puntúa con RMSE, que lo minimiza la media); Q10 y Q90 con pérdida
+      cuantílica y calibración conformal (CQR) en ventana móvil de 60 días; orden forzado Q10 ≤ Q50 ≤ Q90.
+      Optuna con TPE y poda por mediana. Avanza por fases: v0.1 sin optimizar, CQR para G1, Optuna y
+      modelo final para G2.
+    tasks:
+      - "Sub-issues de esta épica"
+    acceptance:
+      - "G1 y G2 superadas sobre el periodo reservado"
+    refs:
+      - "ADR 0014, ADR 0015"
+
+  - id: f6-lgbm
+    title: "Modelo LightGBM v0.1 sin optimizar (Q50, Q10, Q90)"
+    milestone: v01
+    labels: ["area:modelo"]
+    parent: f6
+    context: >-
+      Tres modelos LightGBM con hiperparámetros razonables por defecto sobre la tabla oro (239 variables,
+      410 cierres), objetivo `y_cf` (factor de capacidad) y salida en MW con la capacidad del día.
+      Partición v0.1: entrenamiento sep 2025 – may 2026, validación jun – jul 2026, reservado ago – 15 oct 2026.
+    tasks:
+      - "Implementar la interfaz `Model` del marco: Q50 (L2), Q10 y Q90 (cuantílica), con parada temprana"
+      - "Forzar el orden Q10 ≤ Q50 ≤ Q90 y recortar a [0, capacidad]"
+      - "Semillas fijadas y parámetros registrados"
+      - "Evaluar en los 8 pliegues; importancia de variables guardada como artefacto"
+      - "Tests: orden de cuantiles, recorte y ausencia de look-ahead en el entrenamiento por pliegue"
+    acceptance:
+      - "Métricas de LightGBM en el scorecard junto a las referencias"
+    refs:
+      - "`docs/f3-features.md`, `docs/f4-backtest.md`"
+
+  - id: f8
+    title: "F8 · Calidad e ingeniería"
+    milestone: v02
+    labels: ["tipo:epic", "area:calidad"]
+    context: >-
+      Hay 276 tests que pasan en local (incluidos los anti look-ahead), pero no hay CI, `tests/integration`
+      está vacío, no hay contratos formales entre capas y la reproducibilidad no está probada.
+    tasks:
+      - "Sub-issues de esta épica"
+    acceptance:
+      - "Reentrenar desde cero reproduce las métricas registradas con una diferencia < 0,5 %"
+    refs:
+      - "`docs/historial.md` (F8), STACK.md"
+
+  - id: f8-ci
+    title: "Integración continua en GitHub Actions"
+    milestone: v01
+    labels: ["area:calidad"]
+    parent: f8
+    context: >-
+      El repo ya está en GitHub. Los tests unitarios y anti look-ahead que no necesitan datos deben correr
+      en cada push. El commit inicial se hizo sin pasar los hooks de pre-commit, y pyright da errores
+      `reportUnknown*` en tests antiguos.
+    tasks:
+      - "Workflow con uv (Python 3.14): `ruff check`, `ruff format --check`, `pyright`, `pytest` sin los tests que necesitan `data/`"
+      - "Marcar los tests que leen datos reales (p. ej. `@pytest.mark.data`) y excluirlos en CI"
+      - "`uv run pre-commit run --all-files` limpio; corregir lo que salga"
+      - "Dejar pyright sin errores en `tests/` (o acotar su configuración)"
+      - "Comprobar que ningún paso del CI necesita secretos"
+    acceptance:
+      - "Badge verde en `main` y el workflow falla si se rompe un test anti look-ahead"
+    refs:
+      - "`.pre-commit-config.yaml`, `pyproject.toml`"
+
+  - id: f8-test-env
+    title: "Un test de `status` depende del `.env` local"
+    milestone: v01
+    labels: ["tipo:bug", "area:calidad"]
+    parent: f8
+    context: >-
+      `tests/unit/test_orchestration_ops.py::test_vm_counts_day_without_run_as_failure` falla en el
+      portátil porque `.env` tiene `PREDICO_MISSING_IS_FAILURE=false` y `OpsSettings` lo lee. En CI pasaría
+      (no hay `.env`), lo que esconde el problema.
+    tasks:
+      - "Aislar los tests de `.env` y de variables `PREDICO_*` (fixture que limpie el entorno o `_env_file=None`)"
+    acceptance:
+      - "`uv run pytest tests/unit` pasa en el portátil con el `.env` real"
+    refs:
+      - "`src/predico50hz/orchestration/settings.py`"
+
+  - id: report-github
+    title: "Informe ejecutivo: leer el avance de GitHub en lugar de las marcas de PLAN.md"
+    milestone: v01
+    labels: ["area:informe"]
+    context: >-
+      El capítulo «¿Dónde estamos?» del informe lee el avance de las marcas ✅ 🔄 🟡 de PLAN.md. Con el
+      seguimiento movido a GitHub, esas marcas dejarán de actualizarse y el informe se quedará atrás.
+    tasks:
+      - "En `report/plan.py`, leer milestones e issues de GitHub (`gh api` o API REST con token opcional) y cachear el resultado en `report/*.json`"
+      - "Si no hay red o token, usar la última copia en caché y avisarlo en el informe"
+      - "Mantener el texto sin jerga: hito, fecha, % de tareas cerradas, puertas"
+    acceptance:
+      - "El informe regenerado muestra el avance de los milestones de GitHub"
+    refs:
+      - "`src/predico50hz/report/plan.py`, `docs/report.md`"
+
+  # ── G1 · Histórico completo y baseline ───────────────────────────────────────────────────────
+  - id: g1
+    title: "G1: RMSE del Q50 ≤ operador y cobertura del 80 % entre 76 y 84 %"
+    milestone: g1
+    labels: ["tipo:puerta", "area:modelo"]
+    blocked_by: [v01, f1.4-oro, f6-cqr, f2.5-operador]
+    context: >-
+      Puerta del 5 nov. Regla de corte: si G1 no se supera el 5 de noviembre, el inicio en la liga pasa al
+      1 de enero. Se evalúa en los pliegues de validación con el histórico completo (etapa 3 incluida) y
+      contra el pronóstico del operador tal como estaba publicado antes del cierre.
+    tasks:
+      - "Scorecard con LightGBM + CQR frente al operador en todos los pliegues"
+      - "Veredicto escrito (superada / no superada) y, si no, aplicar la regla de corte"
+      - "Actualizar README e informe ejecutivo"
+    acceptance:
+      - "RMSE del Q50 ≤ RMSE del operador"
+      - "Cobertura empírica del intervalo Q10–Q90 entre 76 % y 84 %"
+    refs:
+      - "ADR 0005, `docs/f4-backtest.md` (definición de G1)"
+
+  - id: f1.4
+    title: "F1.4 · Etapa 3 del histórico (abr 2024 – ago 2025)"
+    milestone: g1
+    labels: ["tipo:epic", "area:nwp"]
+    context: >-
+      La etapa 2 (sep 2025 – oct 2026, 410 pasadas) está completa y validada al 100 %. La etapa 3 añade
+      17 meses, incluido el invierno 2024/25, que es lo que permite validar el comportamiento en diciembre.
+    tasks:
+      - "Sub-issues de esta épica"
+    acceptance:
+      - "Cobertura ≥ 98 % de días con pasada 00Z completa desde 2024-04-01, huecos listados con su causa"
+    refs:
+      - "ADR 0004"
+
+  - id: f1.4-descarga
+    title: "Descargar la etapa 3 en bronce y plata"
+    milestone: g1
+    labels: ["area:nwp"]
+    parent: f1.4
+    context: >-
+      ~520 pasadas (2024-04-01 → 2025-08-31). La ingesta es idempotente y reanudable (`--skip-existing`).
+      Debe convivir con `nwp-daily` sin pisarse (locks del bronce). Se puede lanzar ya en segundo plano.
+    tasks:
+      - "Lanzar la descarga con `--skip-existing` y `--init-workers` acordes al ancho de banda"
+      - "Comprobar que los locks impiden escrituras concurrentes con `nwp-daily`"
+      - "Reconstruir la plata desde el bronce (`rebuild_silver.py`)"
+      - "Anotar MB, tiempo total y errores"
+    acceptance:
+      - "Todas las pasadas del rango en bronce y plata, o los huecos listados"
+    refs:
+      - "`src/predico50hz/ingest/dynamical/__main__.py`, `docs/stage1-dynamical.md` §7"
+
+  - id: f1.4-validacion
+    title: "Validar la etapa 3 con F1.6"
+    milestone: g1
+    labels: ["area:nwp", "area:calidad"]
+    parent: f1.4
+    blocked_by: [f1.4-descarga]
+    context: >-
+      El validador F1.6 nunca ha visto datos reales anteriores al 2024-11-13, cuando la racha de viento
+      (`wind_gust_10m`) es toda NaN. Sus rangos de `std` y de variables no observadas son cotas amplias.
+    tasks:
+      - "Ejecutar el validador con la ingesta parada (evita la incoherencia transitoria bronce/plata)"
+      - "Comprobar la regla de la racha con datos reales: toda NaN antes del 2024-11-13, ninguna después"
+      - "Afinar `RANGES` y `STD_MAX` con los rangos observados del archivo completo"
+      - "Informe JSON en `data/validation/` y resumen en `docs/f1.6-validation.md`"
+    acceptance:
+      - "Cobertura ≥ 98 % sobre 2024-04-01 → hoy, sin incidencias sin explicar"
+    refs:
+      - "`docs/f1.6-validation.md` §5"
+
+  - id: f1.4-oro
+    title: "Regenerar el oro y repetir el backtest con el histórico completo"
+    milestone: g1
+    labels: ["area:variables", "area:backtest"]
+    parent: f1.4
+    blocked_by: [f1.4-validacion]
+    context: >-
+      Con 30 meses los pliegues cambian: entra el invierno 2024/25 en validación y los primeros pliegues
+      dejan de ser tan cortos. Todas las comparaciones hechas con 410 cierres hay que repetirlas.
+    tasks:
+      - "Regenerar `data/gold/features` desde 2024-04-01, validado con Pandera"
+      - "Decidir cómo tratar la racha antes del 2024-11-13 (NaN nativa de LightGBM o variable fuera)"
+      - "Redefinir los pliegues (`evaluation/folds.py`) manteniendo el periodo reservado ago – oct 2026"
+      - "Repetir referencias y LightGBM v0.1; actualizar el informe"
+      - "Pasar los tests anti look-ahead sobre la tabla nueva"
+    acceptance:
+      - "Scorecard regenerado con el histórico completo y los tests de `tests/leakage/` en verde"
+    refs:
+      - "`docs/f3-features.md`, `docs/f4-backtest.md` §9"
+
+  - id: f6-cqr
+    title: "Calibración conformal (CQR) de Q10 y Q90"
+    milestone: g1
+    labels: ["area:modelo"]
+    parent: f6
+    blocked_by: [f6-lgbm]
+    context: >-
+      La cobertura por mes de los modelos actuales oscila entre 69 y 83 %. La CQR ajusta las bandas con los
+      residuos recientes para acercar la cobertura al 80 % nominal. STACK.md elige una implementación propia
+      (unas 50 líneas, con tests) en lugar de MAPIE.
+    tasks:
+      - "CQR con ventana móvil de 60 días, usando solo residuos con realidad disponible antes del cierre"
+      - "Tests con casos calculados a mano y test anti look-ahead de la ventana"
+      - "Evaluar cobertura total y por mes, y Winkler, antes y después de calibrar"
+    acceptance:
+      - "Cobertura del 80 % en validación dentro de 76–84 % sin empeorar el Winkler"
+    refs:
+      - "ADR 0014, STACK.md §2"
+
+  - id: f2.5-operador
+    title: "Comparar contra el pronóstico del operador tal como estaba publicado antes del cierre"
+    milestone: g1
+    labels: ["area:entsoe", "area:backtest"]
+    parent: f2.5
+    blocked_by: [f2.5-analisis]
+    context: >-
+      Hoy la referencia del operador usa la última revisión descargada (16 oct), que puede ser mejor que la
+      que había publicada el día antes. Para que G1 sea justa, hay que compararse con la versión vigente en
+      el cierre (para el histórico, la mejor aproximación posible).
+    tasks:
+      - "Para los cierres desde el 16 oct: usar el bronce por `fetched_at` y tomar la versión vista antes del cierre"
+      - "Para el histórico: cuantificar con esos días cuánto cambia el pronóstico entre la versión del cierre y la última"
+      - "Documentar el sesgo residual en `docs/f4-backtest.md` §9"
+    acceptance:
+      - "La referencia del operador indica qué versión usa y el sesgo estimado queda documentado"
+    refs:
+      - "`docs/f4-backtest.md` §9, `docs/f2-entsoe.md` §6"
+
+  - id: f3.2-precio
+    title: "Añadir el precio day-ahead a la tabla de variables"
+    milestone: g1
+    labels: ["area:variables"]
+    blocked_by: [f2.5-precio]
+    context: >-
+      Solo si la decisión sobre el precio es afirmativa. Si es negativa, cerrar este issue como no
+      planificado.
+    tasks:
+      - "Bloque `price` en el oro con su `available_at` real"
+      - "Variables derivadas: precio negativo, rango horario, precio en las horas de más viento"
+      - "Ampliar el test anti look-ahead para que falle si el precio llega después del cierre"
+      - "Medir la mejora en backtest frente a la tabla sin precio"
+    acceptance:
+      - "Test anti look-ahead en verde y mejora (o no) documentada en `docs/f3-features.md`"
+    refs:
+      - "ADR 0009, `docs/f3-features.md` §9"
+
+  - id: f8-integracion
+    title: "Tests de integración extremo a extremo"
+    milestone: g1
+    labels: ["area:calidad"]
+    parent: f8
+    context: >-
+      `tests/integration` está vacío. Hace falta una prueba que recorra la cadena entera con datos
+      pequeños y deterministas: ingesta → plata → oro → entrenamiento → métricas.
+    tasks:
+      - "Fixtures sintéticos pequeños (pocas pasadas, pocos clústeres) en lugar de datos reales"
+      - "Test que ejecute la cadena y compruebe esquemas y métricas finales"
+      - "Incluirlo en CI si dura < 2 min"
+    acceptance:
+      - "`pytest tests/integration` pasa en local y en CI sin acceso a red"
+
+  # ── v0.2 · Modelo final y cierre de Fase 1 ─────────────────────────────────────────────────────
+  - id: g2
+    title: "G2: mejora sobre G1 confirmada en el periodo reservado"
+    milestone: v02
+    labels: ["tipo:puerta", "area:modelo"]
+    blocked_by: [g1, f6-sobreajuste]
+    context: >-
+      Puerta del 12 nov. El periodo reservado (ago – oct 2026) no lo ve la optimización; cada vez que se
+      evalúa queda anotado en `holdout_log.jsonl`. Limitación conocida: es verano-otoño, con poco viento.
+    tasks:
+      - "Evaluar el modelo final en el periodo reservado (una vez, anotada)"
+      - "Veredicto escrito y actualización del README y del informe"
+    acceptance:
+      - "G1 cumplida también en el periodo reservado"
+      - "RMSE del reservado no más de un 10 % peor que en validación"
+    refs:
+      - "ADR 0005, ADR 0010"
+
+  - id: f6-optuna
+    title: "Optimización de hiperparámetros con Optuna"
+    milestone: v02
+    labels: ["area:modelo"]
+    parent: f6
+    blocked_by: [f1.4-oro, f6-cqr, f5-mlflow]
+    context: >-
+      Sobre el histórico completo. Muestreador TPE, poda por mediana, 150–300 intentos por modelo (50 si
+      el calendario aprieta), número de árboles por parada temprana. Objetivo: media de la métrica en los
+      pliegues de validación. El periodo reservado nunca entra.
+    tasks:
+      - "Espacio: `num_leaves` 15–255; `learning_rate` 0,01–0,1 (log); `min_data_in_leaf` 20–500; `feature_fraction` y `bagging_fraction` 0,5–1; `lambda_l1` y `lambda_l2` 10⁻³–10 (log)"
+      - "Estudio por modelo (Q50, Q10, Q90) con almacenamiento SQLite y registro en MLflow"
+      - "Test que garantice que el periodo reservado no aparece en ningún pliegue de la optimización"
+      - "Revisar importancia de hiperparámetros con Optuna Dashboard"
+    acceptance:
+      - "Mejores parámetros registrados y mejora sobre la v0.1 en validación"
+    refs:
+      - "ADR 0015, ADR 0006 (recorte a 50 intentos)"
+
+  - id: f6-v02
+    title: "Entrenar y evaluar la v0.2 en el periodo reservado"
+    milestone: v02
+    labels: ["area:modelo"]
+    parent: f6
+    blocked_by: [f6-optuna]
+    context: >-
+      Modelo final: mejores hiperparámetros + CQR, entrenado con todo el histórico anterior al periodo
+      reservado, evaluado una vez sobre ago – oct 2026.
+    tasks:
+      - "Entrenar con `--holdout` y registrar en MLflow con la versión de datos"
+      - "Scorecard final y capítulo del informe ejecutivo actualizado (`report/model.yaml` a v0.2)"
+    acceptance:
+      - "Métricas del reservado registradas y anotadas en `holdout_log.jsonl`"
+    refs:
+      - "`docs/f4-backtest.md` (modo `--holdout`)"
+
+  - id: f6-sobreajuste
+    title: "Control de sobreajuste: periodo reservado frente a validación"
+    milestone: v02
+    labels: ["area:modelo"]
+    parent: f6
+    blocked_by: [f6-v02]
+    context: >-
+      Si la métrica en el periodo reservado empeora más de un 10 % respecto a validación, se simplifica el
+      espacio de búsqueda y se repite la optimización.
+    tasks:
+      - "Comparar RMSE, Winkler y cobertura de validación y reservado"
+      - "Si empeora > 10 %: acotar el espacio (menos hojas, más regularización), repetir Optuna y documentar cuántas veces se ha mirado el reservado"
+    acceptance:
+      - "Diferencia ≤ 10 % o decisión documentada"
+    refs:
+      - "ADR 0015 (control de sobreajuste)"
+
+  - id: f1.7
+    title: "F1.7 · Respaldo GRIB `enfo` de ECMWF Open Data"
+    milestone: v02
+    labels: ["tipo:epic", "area:nwp"]
+    context: >-
+      Si dynamical.org no publica a tiempo, hoy `nwp-daily` falla y no hay plan B. El respaldo usa los
+      GRIB del stream `enfo` (mismo origen que dynamical). La cadena GRIB ya está validada con 7 pasadas
+      en HRES (`oper`).
+    tasks:
+      - "Sub-issues de esta épica"
+    acceptance:
+      - "Respaldo y principal coinciden en plata para una fecha de prueba (dentro de la precisión de empaquetado GRIB)"
+    refs:
+      - "ADR 0001, `docs/stage1-pipeline.md`"
+
+  - id: f1.7-enfo
+    title: "Pasar la cadena GRIB de `oper` a `enfo` (51 miembros)"
+    milestone: v02
+    labels: ["area:nwp"]
+    parent: f1.7
+    context: >-
+      La cadena de `src/predico50hz/ingest/ifs/` lee HRES. Debe leer los 51 miembros de `enfo` 00Z, pasos
+      +18 a +54 h, y escribir la plata con exactamente el mismo esquema que la de dynamical.
+    tasks:
+      - "Descarga por rangos de bytes de los campos de `enfo` (100u/100v/10u/10v/10fg/2t/sp/t925/t850…)"
+      - "Plata idéntica en esquema (control, media, std, cuantiles por clúster)"
+      - "Tests con un GRIB pequeño de muestra"
+    acceptance:
+      - "Una pasada de `enfo` produce plata que pasa el validador F1.6"
+    refs:
+      - "`src/predico50hz/ingest/ifs/`, `docs/stage1-pipeline.md` (pendiente para el respaldo)"
+
+  - id: f1.7-comparacion
+    title: "Comparar principal y respaldo en plata"
+    milestone: v02
+    labels: ["area:nwp", "recortable"]
+    parent: f1.7
+    blocked_by: [f1.7-enfo]
+    context: >-
+      Criterio de aceptación de F1. Si el calendario aprieta, se reduce a lo imprescindible para la diaria
+      (ADR 0006).
+    tasks:
+      - "Para varias fechas, comparar el control de dynamical con el miembro de control de `enfo` en los centroides"
+      - "Comparar también media y dispersión del ensemble"
+      - "Documentar diferencias y su origen (empaquetado GRIB, interpolación)"
+    acceptance:
+      - "Diferencias dentro de la precisión de empaquetado GRIB, documentadas en `docs/`"
+
+  - id: f1.7-conmutacion
+    title: "Usar `enfo` automáticamente si dynamical no llega a tiempo"
+    milestone: f2
+    labels: ["area:nwp", "area:ops"]
+    parent: f1.7
+    blocked_by: [f1.7-enfo]
+    context: >-
+      Margen medido de dynamical: ~282 min antes del cierre; `enfo` llega ~40 min antes. La conmutación es
+      lo que convierte el respaldo en algo útil en producción.
+    tasks:
+      - "En `nwp-daily`: si la pasada de dynamical no está a la hora límite, ingerir `enfo` y marcar la fuente en `nwp_availability` y en el oro"
+      - "Cuando dynamical llegue después, no sobrescribir la predicción ya enviada; registrar ambas"
+      - "Actualizar el runbook `docs/runbooks/nwp-no-llega.md`"
+      - "Test con dynamical simulado caído"
+    acceptance:
+      - "Simulando dynamical caído, el job completa con `enfo` y deja constancia de la fuente"
+
+  - id: f1-lsm
+    title: "Máscara tierra-mar para los puntos marinos"
+    milestone: v02
+    labels: ["area:nwp"]
+    context: >-
+      dynamical no trae máscara tierra-mar, así que los 5 centroides marinos se interpolan igual que los
+      terrestres. El ADR 0003 prevé tomar `lsm` una vez de los GRIB abiertos (disponible desde 2023-03-30).
+    tasks:
+      - "Descargar `lsm` una vez y guardarla con su versión"
+      - "Interpolar los puntos marinos solo con celdas de mar (y los terrestres con celdas de tierra si mejora)"
+      - "Medir el efecto en `y_cf_sea` en backtest"
+    acceptance:
+      - "Plata de los clústeres marinos con la máscara aplicada y efecto medido"
+    refs:
+      - "ADR 0003, `docs/stage1-dynamical.md`"
+
+  - id: f7
+    title: "F7 · Benchmark de modelos fundacionales"
+    milestone: v02
+    labels: ["tipo:epic", "area:modelo", "recortable"]
+    context: >-
+      Primero en recortarse si el calendario aprieta (se movería a después del 1 dic). Si se adopta algún
+      modelo, entra como componente del ensemble, no como sustituto de LightGBM.
+    tasks:
+      - "Sub-issues de esta épica"
+    acceptance:
+      - "Licencia compatible con uso comercial y en producción"
+      - "Mejora ≥ 5 % en RMSE o en Winkler sobre el periodo reservado frente a LightGBM"
+    refs:
+      - "ADR 0016, ADR 0006"
+
+  - id: f7-licencias
+    title: "Identificar «Timestral» y verificar las licencias de los candidatos"
+    milestone: v02
+    labels: ["area:modelo", "recortable"]
+    parent: f7
+    context: >-
+      Candidatos: «Timestral» (modelo exacto sin identificar), Chronos-2 (verificar licencia),
+      TimesFM 2.5 (apto para uso comercial) y TimesFM 3 (solo investigación; su licencia prohíbe producción).
+    tasks:
+      - "Identificar el modelo exacto detrás de «Timestral»"
+      - "Leer la licencia de cada candidato y anotar si permite uso comercial y en producción"
+      - "Tabla de candidatos en `docs/` con licencia, tamaño, covariables futuras y requisitos de GPU"
+    acceptance:
+      - "Lista cerrada de candidatos aptos con su licencia citada"
+
+  - id: f7-arnes
+    title: "Arnés común para modelos fundacionales"
+    milestone: v02
+    labels: ["area:modelo", "recortable"]
+    parent: f7
+    blocked_by: [f6-lgbm]
+    context: >-
+      Mismas variables NWP como covariables futuras conocidas, mismos pliegues y mismas métricas que
+      LightGBM, a través de la interfaz `Model` del marco de backtest.
+    tasks:
+      - "Adaptador `Model` que pase historia + covariables futuras al modelo fundacional"
+      - "Cuantiles Q10/Q50/Q90 nativos o por muestreo"
+      - "Test anti look-ahead del contexto que recibe el modelo"
+    acceptance:
+      - "Un modelo trivial pasa por el arnés y sale en el scorecard"
+
+  - id: f7-zeroshot
+    title: "Evaluar los candidatos sin ajuste (zero-shot)"
+    milestone: v02
+    labels: ["area:modelo", "recortable"]
+    parent: f7
+    blocked_by: [f7-arnes, f7-licencias]
+    context: >-
+      Primero sin ajuste; ajuste fino solo si queda a menos de un 10 % de LightGBM.
+    tasks:
+      - "Evaluar cada candidato apto en los pliegues de validación (CPU o RTX 4090)"
+      - "Si alguno queda a < 10 % de LightGBM: ajuste fino y nueva evaluación"
+      - "Registrar todo en MLflow"
+    acceptance:
+      - "Scorecard con los candidatos frente a LightGBM"
+
+  - id: f7-decision
+    title: "Decidir si algún modelo fundacional entra en el ensemble"
+    milestone: v02
+    labels: ["tipo:decisión", "area:modelo", "recortable"]
+    parent: f7
+    blocked_by: [f7-zeroshot, f6-v02]
+    context: >-
+      Criterio: mejora ≥ 5 % en RMSE o Winkler sobre el periodo reservado frente a LightGBM y licencia apta.
+    tasks:
+      - "Comparar en el periodo reservado (evaluación anotada en `holdout_log.jsonl`)"
+      - "Si entra: definir cómo se combina (media ponderada de cuantiles, apilado) y recalibrar con CQR"
+    acceptance:
+      - "Decisión escrita en un ADR nuevo"
+
+  - id: f8-contratos
+    title: "Contratos de datos entre bronce, plata y oro"
+    milestone: v02
+    labels: ["area:calidad"]
+    parent: f8
+    context: >-
+      Cada capa valida su salida con Pandera, pero no hay un contrato explícito que la capa siguiente
+      compruebe al leer (columnas, tipos, unidades, claves, frecuencia).
+    tasks:
+      - "Esquemas Pandera compartidos por capa en un único módulo"
+      - "Validación al leer en plata → oro y oro → modelo"
+      - "Detector de campos congelados (pasada idéntica a la anterior), que hoy no existe"
+    acceptance:
+      - "Un cambio de esquema en una capa rompe un test en la capa siguiente"
+    refs:
+      - "`docs/f1.6-validation.md` §5"
+
+  - id: f8-repro
+    title: "Reproducibilidad: reentrenar desde cero reproduce las métricas (< 0,5 %)"
+    milestone: v02
+    labels: ["area:calidad", "area:modelo"]
+    parent: f8
+    blocked_by: [f6-v02]
+    context: >-
+      Criterio de F8: semillas fijadas, versiones bloqueadas (`uv.lock`) y cada experimento enlazado a la
+      versión de datos (snapshot de Icechunk y versión Delta del oro).
+    tasks:
+      - "Reentrenar la v0.2 desde cero en una copia limpia del repo con la misma versión de datos"
+      - "Comparar métricas con las registradas en MLflow"
+      - "Documentar el procedimiento"
+    acceptance:
+      - "Diferencia < 0,5 % en RMSE, Winkler y cobertura"
+
+  - id: predico-credenciales
+    title: "Conseguir las credenciales de Predico (límite: 15 nov)"
+    milestone: v02
+    labels: ["externo", "area:producción"]
+    context: >-
+      Regla de corte: si el 15 de noviembre no hay credenciales de Predico, el inicio pasa al 1 de enero
+      (sin rodaje no se entra en liga).
+    tasks:
+      - "Solicitar acceso y hacer seguimiento"
+      - "Guardar las credenciales fuera de git (`.env`, cifrado con sops + age cuando esté)"
+    acceptance:
+      - "Credenciales probadas contra la API de Predico antes del 15 nov"
+
+  - id: f9
+    title: "F9 · Cierre de la Fase 1: informe y decisión 1 dic / 1 ene"
+    milestone: v02
+    labels: ["tipo:decisión", "area:informe"]
+    blocked_by: [g2, predico-credenciales]
+    context: >-
+      Informe corto con resultados frente a las puertas, modelo elegido y riesgos abiertos.
+    tasks:
+      - "Resultados G0, v0.1, G1 y G2 con sus cifras"
+      - "Modelo elegido (LightGBM + CQR, con o sin componente fundacional)"
+      - "Riesgos abiertos (holdout de verano, respaldo NWP, dependencia de dynamical)"
+      - "Decisión: entrada en liga el 1 de diciembre o el 1 de enero"
+      - "Versión para negocio en el informe ejecutivo"
+    acceptance:
+      - "Informe publicado y decisión registrada en un ADR nuevo"
+    refs:
+      - "ADR 0005 (decisión 1 dic / 1 ene)"
+
+  # ── Fase 2 · Sistema de producción ─────────────────────────────────────────────────────────
+  - id: fase2
+    title: "5 · Producción"
+    milestone: f2
+    labels: ["tipo:epic", "area:producción"]
+    context: >-
+      Del 13 al 24 nov: pasar del backtest a enviar cada día un pronóstico a Predico antes del cierre, con
+      margen, alertas y respaldo. El plan original lo dejaba «a definir»; la primera tarea es definirlo.
+    tasks:
+      - "Sub-issues de esta épica"
+    refs:
+      - "STACK.md"
+
+  - id: p2-definicion
+    title: "Definir el sistema de producción"
+    milestone: f2
+    labels: ["tipo:decisión", "area:producción"]
+    parent: fase2
+    blocked_by: [f9]
+    context: >-
+      Punto de partida del plan original: orquestación con Dagster, cliente de Predico, producción principal en
+      el sobremesa y respaldo en Docker sobre TrueNAS, alertas y envío temprano de seguridad. Hoy la
+      operación diaria corre con systemd (portátil) y con el planificador `serve` en Docker (Hetzner).
+    tasks:
+      - "Arquitectura: dónde corre cada pieza, qué pasa si cae cada una"
+      - "Horario del día de producción con márgenes (NWP ~08:20 UTC, cierre 13:00/14:00 UTC)"
+      - "Decidir si Dagster sustituye a systemd/`serve` o convive"
+      - "ADR en `docs/adr/` y documento de Fase 2"
+    acceptance:
+      - "Documento de Fase 2 y ADR aprobados; el resto de sub-issues ajustados a él"
+
+  - id: p2-api
+    title: "Estudiar la API de Predico: formato de envío, cuantiles y reenvíos"
+    milestone: f2
+    labels: ["area:producción", "externo"]
+    parent: fase2
+    context: >-
+      Se puede empezar ya con la documentación pública. Hay que saber, entre otras cosas, si Predico
+      permite reenviar antes del cierre: de eso depende el envío temprano de seguridad.
+    tasks:
+      - "Formato del envío (resolución, unidades, cuantiles, zona horaria)"
+      - "¿Se puede reenviar antes del cierre? ¿Cuenta el último?"
+      - "Límites, autenticación, respuesta de confirmación"
+      - "Cómo descarga Predico los datos brutos de ENTSO-E (para la comparación de F2)"
+      - "Notas en `docs/`"
+    acceptance:
+      - "Documento con el contrato de la API y respuesta a la pregunta del reenvío"
+
+  - id: p2-inferencia
+    title: "Predicción diaria de D+1 con el modelo elegido antes del cierre"
+    milestone: f2
+    labels: ["area:producción", "area:modelo"]
+    parent: fase2
+    blocked_by: [p2-definicion, f6-v02]
+    context: >-
+      Tras `nwp-daily` (variables de D listas ~08:30 UTC), cargar el modelo registrado, predecir los
+      cuartos de hora de D+1 y dejar la predicción lista para el envío con margen ≥ 60 min.
+    tasks:
+      - "Job de inferencia que use exactamente las mismas variables que el entrenamiento"
+      - "Modelo cargado desde MLflow por versión fijada"
+      - "Validación de la salida (96/92/100 pasos según cambio de hora, Q10 ≤ Q50 ≤ Q90, rango)"
+      - "Registro de la hora de cada paso para medir el margen"
+    acceptance:
+      - "Una semana de predicciones diarias generadas solas, con margen registrado"
+
+  - id: p2-cliente
+    title: "Cliente de Predico para enviar el pronóstico"
+    milestone: f2
+    labels: ["area:producción"]
+    parent: fase2
+    blocked_by: [p2-api, predico-credenciales]
+    context: >-
+      Envío de la predicción diaria con reintentos, confirmación y registro, sin filtrar credenciales a
+      los logs (mismo patrón que el cliente de ENTSO-E).
+    tasks:
+      - "Cliente con reintentos y redacción de secretos"
+      - "Registro de cada envío (hora, respuesta, contenido) en `data/ops/`"
+      - "Modo de prueba contra el entorno de Predico si existe"
+    acceptance:
+      - "Envío de prueba aceptado por Predico y registrado"
+
+  - id: p2-dagster
+    title: "Orquestación diaria con Dagster"
+    milestone: f2
+    labels: ["area:producción", "area:ops"]
+    parent: fase2
+    blocked_by: [p2-definicion]
+    context: >-
+      STACK.md elige Dagster (grafo de assets) para producción. Solo si la definición de la Fase 2 lo
+      confirma; si no, cerrar como no planificado.
+    tasks:
+      - "Assets: NWP del día → oro de D → predicción → envío"
+      - "Sensores/horarios con la misma lógica de espera que `nwp-daily`"
+      - "Registro de ejecuciones compatible con `status` y G0"
+    acceptance:
+      - "El día completo corre en Dagster y queda visible en su UI"
+
+  - id: p2-alertas
+    title: "Alertas y observabilidad"
+    milestone: f2
+    labels: ["area:producción", "area:ops"]
+    parent: fase2
+    blocked_by: [p2-definicion]
+    context: >-
+      Hoy no hay alertas activas: hay que mirar `status` a mano. En producción un fallo silencioso es un
+      día perdido en la liga.
+    tasks:
+      - "Avisos activos (móvil) ante: NWP sin llegar a la hora límite, job fallido, predicción sin generar, envío no confirmado"
+      - "Panel con margen al cierre, estado de jobs y error diario frente al operador (Grafana del homelab)"
+      - "Prueba de cada alerta provocando el fallo"
+    acceptance:
+      - "Cada fallo simulado genera un aviso en < 5 min"
+
+  - id: p2-respaldo
+    title: "Respaldo en Docker sobre TrueNAS"
+    milestone: f2
+    labels: ["area:producción", "area:ops"]
+    parent: fase2
+    blocked_by: [p2-inferencia]
+    context: >-
+      Si el sobremesa cae, el respaldo debe poder predecir y enviar por su cuenta. La imagen Docker de la
+      operación diaria ya existe y se probó en Hetzner.
+    tasks:
+      - "Desplegar la imagen en TrueNAS con acceso a los datos y al modelo"
+      - "Regla para que solo envíe uno (principal o respaldo) y nunca se pisen"
+      - "Simulacro: apagar el principal un día y comprobar el envío del respaldo"
+    acceptance:
+      - "Simulacro superado y documentado"
+
+  - id: p2-mastr
+    title: "Actualizar MaStR periódicamente en producción"
+    milestone: f2
+    labels: ["area:producción", "area:variables"]
+    parent: fase2
+    context: >-
+      La capacidad instalada por fecha (denominador del factor de capacidad y pesos por clúster) sale del
+      export de MaStR del 15 oct. En producción hay que incorporar las altas nuevas; el export puede ir
+      1–2 días por detrás.
+    tasks:
+      - "Job semanal de descarga de MaStR (reanudable, por rangos) y recálculo de la capacidad diaria"
+      - "Mantener fijos los centroides de los clústeres (no reagrupar sin reentrenar)"
+      - "Alerta si la capacidad cambia de forma anómala"
+    acceptance:
+      - "La capacidad del día de producción refleja las altas de la última semana"
+    refs:
+      - "`docs/f2.6-mastr.md`"
+
+  - id: p2-envio-temprano
+    title: "Envío temprano de seguridad"
+    milestone: f2
+    labels: ["area:producción"]
+    parent: fase2
+    blocked_by: [p2-cliente]
+    context: >-
+      Si Predico permite reenviar antes del cierre: mandar a primera hora un pronóstico simple (p. ej. la
+      curva de potencia o el modelo con la NWP del día anterior) y sustituirlo por el bueno cuando esté.
+      Si no lo permite, cerrar como no planificado.
+    tasks:
+      - "Pronóstico de seguridad que no dependa de la NWP del día"
+      - "Envío temprano y sustitución posterior, con registro de ambos"
+    acceptance:
+      - "Un día con la NWP caída sigue habiendo un envío válido"
+
+  - id: p2-secretos
+    title: "Secretos cifrados con sops + age"
+    milestone: f2
+    labels: ["area:producción", "area:calidad"]
+    parent: fase2
+    context: >-
+      STACK.md prevé `.env` cifrado con sops + age. Con el token de ENTSO-E y las credenciales de Predico en
+      varias máquinas (sobremesa, TrueNAS, Hetzner) conviene tenerlo antes del rodaje. El repo es público.
+    tasks:
+      - "Fichero de secretos cifrado en el repo y claves age por máquina"
+      - "Descifrado en el despliegue (systemd y Docker)"
+      - "Comprobar que ningún secreto en claro entra en git (hook de pre-commit)"
+    acceptance:
+      - "Despliegue en una máquina nueva sin copiar `.env` a mano"
+
+  - id: f2-predico-brutos
+    title: "Comparar nuestros datos de ENTSO-E con los brutos de Predico"
+    milestone: f2
+    labels: ["area:entsoe", "externo"]
+    blocked_by: [predico-credenciales]
+    context: >-
+      Criterio de aceptación de F2: la serie objetivo que reconstruimos (con arrastre de valores A03) debe
+      coincidir con la que usa Predico para puntuar.
+    tasks:
+      - "Descargar los datos de Predico para un periodo solapado"
+      - "Comparar cuarto a cuarto y explicar cada diferencia"
+    acceptance:
+      - "Coincidencia documentada o diferencias corregidas en la reconstrucción"
+    refs:
+      - "`docs/f2-entsoe.md` §8"
+
+  # ── Rodaje ─────────────────────────────────────────────────────────────────────────────────
+  - id: rodaje
+    title: "Rodaje: cero días perdidos y margen p95 ≥ 60 min"
+    milestone: rodaje
+    labels: ["tipo:puerta", "area:producción"]
+    blocked_by: [p2-inferencia, p2-cliente, p2-alertas, p2-respaldo, f1.7-conmutacion]
+    context: >-
+      Del 25 al 30 nov, el sistema envía cada día a Predico como si ya fuera la liga.
+    tasks:
+      - "Envíos diarios del 25 al 30 nov sin intervención"
+      - "Margen al cierre registrado cada día"
+      - "Revisión diaria del error frente al operador"
+    acceptance:
+      - "Cero días perdidos"
+      - "Margen p95 ≥ 60 min antes del cierre"
+    refs:
+      - "ADR 0005"
+
+  - id: liga
+    title: "Arranque del primer mes de liga (1 dic)"
+    milestone: rodaje
+    labels: ["tipo:puerta", "area:producción"]
+    blocked_by: [rodaje]
+    context: >-
+      Primer mes de liga en Predico, si F9 decidió el 1 de diciembre.
+    tasks:
+      - "Confirmar inscripción y fecha de inicio"
+      - "Plan de guardia para diciembre (quién mira las alertas, qué hacer si falla el envío)"
+    acceptance:
+      - "Primer envío de liga aceptado el 1 dic"
+
+  # ── Después del 1 dic ──────────────────────────────────────────────────────────────────────
+  - id: f1-calidad
+    title: "Calidad del NWP: ciclo de IFS por pasada y coherencia con la fuente"
+    milestone: despues
+    labels: ["area:nwp", "area:calidad"]
+    context: >-
+      Comprobaciones del primer día que quedaron pendientes: registrar el ciclo de IFS de cada pasada y
+      revisar si los residuos saltan en los cambios de ciclo; validar valores (no solo presencia) entre
+      plata y bronce.
+    tasks:
+      - "Registrar el ciclo de IFS por pasada (metadatos de dynamical o de ECMWF)"
+      - "Revisar residuos del modelo alrededor de cada cambio de ciclo"
+      - "Recalcular una muestra de plata desde el bronce y comparar valores"
+    acceptance:
+      - "Ciclos registrados y efecto documentado"
+    refs:
+      - "`docs/stage1-dynamical.md` (no verificado), `docs/f1.6-validation.md` §5"
+
+  - id: f2-revisiones
+    title: "Medir la tasa de revisiones de ENTSO-E"
+    milestone: despues
+    labels: ["area:entsoe"]
+    context: >-
+      El archivo diario por `fetched_at` (F2.7) existe para medir cuánto y cuándo revisa ENTSO-E la
+      generación, el precio y el pronóstico. Con unas semanas de datos se puede medir.
+    tasks:
+      - "Por dataset: porcentaje de valores revisados, magnitud y retraso de la revisión"
+      - "Impacto en el objetivo de entrenamiento y en la puntuación de Predico"
+    acceptance:
+      - "Sección de revisiones en `docs/f2-entsoe.md` §6 con cifras"
+
+  - id: report-movil
+    title: "Verificar el informe ejecutivo en móvil"
+    milestone: despues
+    labels: ["area:informe"]
+    context: >-
+      El capítulo «¿Mejora el pronóstico?» solo se ha verificado en escritorio (claro).
+    tasks:
+      - "Revisar todos los capítulos en anchura de móvil y en modo oscuro"
+      - "Corregir desbordes de tablas y gráficos"
+    acceptance:
+      - "Sin scroll horizontal ni gráficos cortados a 390 px de ancho"
+
+  - id: panel-comparativas
+    title: "Panel propio de comparativas de la liga"
+    milestone: despues
+    labels: ["area:informe", "area:producción"]
+    context: >-
+      STACK.md §3: un frontend propio no compensa en la Fase 1, pero a partir de diciembre puede servir
+      para comparar nuestros envíos frente al operador y a la mediana de Predico, y analizar los días malos,
+      donde Grafana se quede corto.
+    tasks:
+      - "Decidir si Grafana basta tras el primer mes de liga"
+      - "Si no: alcance mínimo del panel"
+    acceptance:
+      - "Decisión documentada tras el primer mes de liga"

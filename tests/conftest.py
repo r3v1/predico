@@ -2,6 +2,7 @@
 """Plata sintética mínima para las pruebas de la capa de variables (sin depender de `data/`)."""
 
 import datetime as dt
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,9 +10,12 @@ import numpy as np
 import polars as pl
 import pytest
 import yaml
+from pydantic_settings import BaseSettings
 
+from predico50hz import settings as _settings  # noqa: F401 (registra la subclase)
 from predico50hz.features.build import Sources
 from predico50hz.features.nwp import INSTANT_VARS, LEADS
+from predico50hz.orchestration import settings as _ops_settings  # noqa: F401 (registra la subclase)
 
 STATS = ("ctrl", "mean", "std", "p10", "p50", "p90")
 POINTS = [("lan_a", "land", 1000.0), ("lan_b", "land", 3000.0), ("sea_a", "sea", 2000.0)]
@@ -117,6 +121,19 @@ class Synth:
         pl.DataFrame({"ts_utc": ts, "forecast_mw": np.full(ts.len(), 777.0)}).write_delta(
             str(self.root / "forecast"), mode="overwrite"
         )
+
+
+def _todas_las_subclases(cls: type[BaseSettings]) -> list[type[BaseSettings]]:
+    return [s for sub in cls.__subclasses__() for s in (sub, *_todas_las_subclases(sub))]
+
+
+@pytest.fixture(autouse=True)
+def _aislar_ajustes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ningún test lee el `.env` del equipo ni variables `PREDICO_*` del entorno."""
+    for name in [n for n in os.environ if n.startswith("PREDICO_")]:
+        monkeypatch.delenv(name)
+    for cls in _todas_las_subclases(BaseSettings):
+        monkeypatch.setitem(cls.model_config, "env_file", None)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
 
 
 @pytest.fixture

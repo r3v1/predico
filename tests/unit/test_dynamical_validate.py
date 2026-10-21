@@ -17,6 +17,7 @@ from predico50hz.ingest.dynamical.validate import (
     N_LEADS,
     RANGES,
     SILVER_VARIABLES,
+    STD_MAX,
     DayResult,
     bronze_pass_stats,
     build_report,
@@ -98,6 +99,31 @@ def test_silver_out_of_range_is_flagged() -> None:
     issues = validate_silver(df, AFTER, N_POINTS)
     assert ("range", "wind_speed_100m_p90") in _checks(issues)
     assert {i.cause for i in issues} >= {"fuera_de_rango"}
+
+
+# Extremos observados en bronce en el archivo completo (934 pasadas, 2024-04-01..2026-10-21).
+OBSERVED = {
+    "wind_u_100m": (-31.75, 33.0),
+    "wind_v_100m": (-29.75, 35.5),
+    "wind_u_10m": (-28.5, 29.75),
+    "wind_v_10m": (-26.0, 30.5),
+    "wind_gust_10m": (0.108, 44.0),
+    "temperature_2m": (-21.375, 42.25),
+    "temperature_925hpa": (-16.375, 33.25),
+    "temperature_850hpa": (-17.25, 25.75),
+    "pressure_surface": (87_904.0, 104_832.0),
+    "pressure_reduced_to_mean_sea_level": (95_520.0, 104_800.0),
+}
+OBSERVED_STD_MAX = {"wind_u_100m": 8.63, "wind_v_100m": 9.75, "temperature_925hpa": 4.24}
+
+
+def test_limits_keep_margin_over_observed_archive() -> None:
+    for name, (lo, hi) in OBSERVED.items():
+        rlo, rhi = RANGES[name]
+        assert rlo < lo < hi < rhi, name
+    for name, std in OBSERVED_STD_MAX.items():
+        assert std < STD_MAX[name], name
+    assert set(STD_MAX) == set(RANGES)
 
 
 def test_silver_kelvin_instead_of_celsius_is_out_of_range() -> None:

@@ -56,30 +56,40 @@ GUST_START = dt.date(2024, 11, 13)  # primera pasada con racha (docs/stage0-dyna
 N_LEADS = len(LEAD_HOURS)
 GRID_SHAPE = (27, 31)  # latitud x longitud del dominio recortado
 
-# Rangos físicos de cada variable: observado en stage0 más un margen holgado. Un valor fuera
-# solo puede venir de un error de lectura, de unidades o de relleno, no de la meteorología.
+# Rangos físicos de cada variable. Se afinaron con el archivo completo (934 pasadas,
+# 2024-04-01..2026-10-21; docs/f1.6-validation.md §3): el límite deja un margen del 10-30 % sobre
+# el extremo observado en bronce (todos los miembros y celdas) para aceptar temporales o olas de
+# calor aún no vistos. Un valor fuera solo puede venir de un error de lectura, de unidades o de
+# relleno, no de la meteorología.
 RANGES: dict[str, tuple[float, float]] = {
-    "wind_u_100m": (-60.0, 60.0),  # observado -22,5..30,0
-    "wind_v_100m": (-60.0, 60.0),  # -29,8..30,5
-    "wind_u_10m": (-50.0, 50.0),  # -20,5..26,3
-    "wind_v_10m": (-50.0, 50.0),  # -17,3..26,8
-    "wind_gust_10m": (0.0, 80.0),  # 0,11..41,5
-    "temperature_2m": (-45.0, 50.0),  # °C; -16,3..32,3
-    "pressure_surface": (85_000.0, 106_000.0),  # Pa; 91 104..103 936
-    "temperature_925hpa": (-45.0, 40.0),  # -12,4..25,1
-    "temperature_850hpa": (-50.0, 35.0),  # -13,6..19,0
-    "pressure_reduced_to_mean_sea_level": (93_000.0, 107_000.0),  # 96 512..104 000
-    "wind_speed_100m": (0.0, 70.0),
-    "wind_speed_10m": (0.0, 60.0),
+    "wind_u_100m": (-50.0, 50.0),  # observado -31,75..33,0
+    "wind_v_100m": (-50.0, 50.0),  # -29,75..35,5
+    "wind_u_10m": (-40.0, 40.0),  # -28,5..29,75
+    "wind_v_10m": (-40.0, 40.0),  # -26,0..30,5
+    "wind_gust_10m": (0.0, 70.0),  # 0,11..44,0
+    "temperature_2m": (-35.0, 48.0),  # °C; -21,4..42,25
+    "pressure_surface": (80_000.0, 107_000.0),  # Pa; 87 904..104 832 (celdas de relieve)
+    "temperature_925hpa": (-30.0, 42.0),  # -16,4..33,25
+    "temperature_850hpa": (-30.0, 35.0),  # -17,25..25,75
+    "pressure_reduced_to_mean_sea_level": (93_000.0, 107_000.0),  # 95 520..104 800
+    "wind_speed_100m": (0.0, 60.0),  # módulo de u/v: máx. observado ~48
+    "wind_speed_10m": (0.0, 50.0),  # máx. observado ~43
 }
-# Cota superior de la desviación típica del ensemble (muy por encima de la dispersión real).
+# Cota superior de la desviación típica del ensemble, ~1,5-3 veces el máximo observado
+# (u/v 9,7; velocidades y racha 5,7; temperaturas 4,2; presiones 610 Pa).
 STD_MAX: dict[str, float] = {
-    **{v: 20.0 for v in RANGES if v.startswith("wind_")},
-    "temperature_2m": 15.0,
-    "temperature_925hpa": 15.0,
-    "temperature_850hpa": 15.0,
-    "pressure_surface": 3_000.0,
-    "pressure_reduced_to_mean_sea_level": 3_000.0,
+    "wind_u_100m": 15.0,
+    "wind_v_100m": 15.0,
+    "wind_u_10m": 15.0,
+    "wind_v_10m": 15.0,
+    "wind_gust_10m": 12.0,
+    "wind_speed_100m": 12.0,
+    "wind_speed_10m": 12.0,
+    "temperature_2m": 10.0,
+    "temperature_925hpa": 10.0,
+    "temperature_850hpa": 10.0,
+    "pressure_surface": 2_000.0,
+    "pressure_reduced_to_mean_sea_level": 2_000.0,
 }
 SILVER_VARIABLES: tuple[str, ...] = (*VARIABLES, *SPEEDS)
 # Orden de las causas de hueco en el informe (la primera es la principal).

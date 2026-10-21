@@ -53,6 +53,8 @@ class Model(ABC):
     unit: ClassVar[Unit] = "cf"
     # Referencia externa que no se entrena (el operador): no se compara consigo misma.
     is_operator: ClassVar[bool] = False
+    # Referencia sencilla (F5) frente a la que se mide un modelo de verdad.
+    is_reference: ClassVar[bool] = False
 
     def params(self) -> dict[str, Any]:
         """Parámetros serializables (JSON) que se guardan en `run.json`."""

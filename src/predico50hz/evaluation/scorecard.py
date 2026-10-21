@@ -180,7 +180,7 @@ def _entry(model: str, runs: list[dict[str, Any]], all_val: list[dict[str, Any]]
     return {
         "model": model,
         "label": label(model),
-        "kind": "operador" if is_op else "referencia",
+        "kind": "operador" if is_op else ("referencia" if cls and cls.is_reference else "modelo"),
         "validation": {
             "run_id": last["run_id"],
             "created_at": last["created_at"],

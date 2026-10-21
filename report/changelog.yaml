@@ -2,6 +2,16 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.6"
+    date: 2026-10-21
+    title: Primer modelo propio, todavía sin afinar
+    items:
+      - "Primer modelo de verdad: aprende del viento previsto en cada grupo de parques y da, para cada cuarto de hora, un valor central y un rango donde debería caer la producción."
+      - "Se ha probado mes a mes, como las referencias: hoy queda algo por detrás de la curva de potencia (un 3 % más de error) y lejos del operador. Es lo esperado sin afinar; el ajuste y la corrección del rango vienen en los próximos pasos."
+      - "Su rango es demasiado estrecho: acierta el 64 % de las veces en vez del 80 % buscado."
+      - "Cada prueba queda guardada en un registro de experimentos, con la versión exacta de los datos que usó."
+      - "Cada hora se apunta además hasta qué cuarto de hora hay producción real publicada. Servirá para la referencia «repetir lo de ayer» sin hacer trampa."
+      - "Las comprobaciones automáticas (incluida la que impide mirar al futuro) se ejecutarán en cada cambio del código."
   - version: "0.5"
     date: 2026-10-20
     title: La descarga automática aguanta mejor los fallos

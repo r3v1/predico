@@ -1,5 +1,7 @@
 # Predico 50Hertz
 
+[![CI](https://github.com/r3v1/predico/actions/workflows/ci.yml/badge.svg)](https://github.com/r3v1/predico/actions/workflows/ci.yml)
+
 Pronóstico probabilístico (Q10, Q50, Q90) de la generación eólica en la zona de control de 50Hertz para la liga de Predico (`germany_wind_50hertz_ca`): ingesta de datos meteorológicos (IFS ENS de ECMWF), generación y precios (ENTSO-E) y capacidad renovable (MaStR), con modelos de gradient boosting y calibración conformal.
 
 ## Dónde está cada cosa
@@ -225,7 +227,7 @@ uv run python -m predico50hz.orchestration export      # data/ops/export_<fecha>
 |---|---|---|
 | `entsoe-daily` | 06:00 | ENTSO-E completo, últimos 3 días (revisiones, F2.7) |
 | `nwp-daily` | 07:45 | Espera la pasada 00Z de dynamical, registra su hora real y la del `.index` `enfo`, ingiere, valida y genera las variables de D; se pone al día con lo que falte |
-| `entsoe-hourly` | cada hora | Precio y pronóstico del operador, para medir su hora de publicación (`publication-times`) |
+| `entsoe-hourly` | cada hora | Precio y pronóstico del operador, para medir su hora de publicación (`publication-times`), y último cuarto de hora de generación real publicado (`data/ops/generation_lag.jsonl`) |
 
 En systemd cada job espera antes a tener red (`wait-online`) y se reintenta solo si falla (`Restart=on-failure`); el cliente de ENTSO-E reintenta además los `400` transitorios de la API. Registro en `data/ops/` (`runs.jsonl`, `nwp_availability`, `ops.log`), con `host`. Locks de fichero: un único escritor por almacén. En el portátil un día apagado no es fallo (`PREDICO_MISSING_IS_FAILURE=false` en `.env`); la comprobación de 7 días se hace con Docker (`docker/compose.yaml`) en una VM efímera de Hetzner (`deploy/hetzner/bootstrap.sh`). Detalle en `docs/f1.5-f2.7-operations.md`; runbook en `docs/runbooks/nwp-no-llega.md`.
 
@@ -234,10 +236,13 @@ En systemd cada job espera antes a tener red (`wait-online`) y se reintenta solo
 ```bash
 uv run python -m predico50hz.evaluation run --model power_curve          # walk-forward mensual (sin holdout)
 uv run python -m predico50hz.evaluation run --model power_curve --holdout # queda registrado y contado
+uv run python -m predico50hz.evaluation run --model lgbm --mlflow         # LightGBM v0.1, registrado también en MLflow
+uv run python -m predico50hz.evaluation mlflow-sync                       # registra en MLflow las ejecuciones ya en disco
 uv run python -m predico50hz.evaluation report                            # scorecard + PNG en data/backtest/report/
+MLFLOW_ALLOW_FILE_STORE=true uvx --from 'mlflow==3.17.2' mlflow ui --backend-store-uri file:data/mlflow
 ```
 
-Métricas como Predico, en MW: RMSE del Q50, Winkler medio (α = 0,2), cobertura del 80 %, error de pico y días ganados al operador. El `scorecard.json` da el veredicto «mejora / empeora / igual» y el estado de G1, y alimenta el capítulo «¿Mejora el pronóstico?» del informe ejecutivo. Referencias actuales (validación dic 2025 – jul 2026): operador 931 MW, curva de potencia 1 197 MW, climatología 3 406 MW. Detalle en `docs/f4-backtest.md`.
+Métricas como Predico, en MW: RMSE del Q50, Winkler medio (α = 0,2), cobertura del 80 %, error de pico y días ganados al operador. El `scorecard.json` da el veredicto «mejora / empeora / igual» y el estado de G1, y alimenta el capítulo «¿Mejora el pronóstico?» del informe ejecutivo. Validación dic 2025 – jul 2026 (RMSE del Q50): operador 931 MW, curva de potencia 1 197 MW, LightGBM v0.1 sin optimizar 1 233 MW (cobertura 64 %), climatología 3 406 MW. Cada ejecución se registra en MLflow (`data/mlflow`, con `mlflow-skinny`) con la versión de la tabla oro y el snapshot del bronce NWP. Detalle en `docs/f4-backtest.md`.
 
 ## Estructura
 

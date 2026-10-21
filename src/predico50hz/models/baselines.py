@@ -51,6 +51,7 @@ class Climatology(Model):
     """
 
     name: ClassVar[str] = "climatology"
+    is_reference: ClassVar[bool] = True
     label: ClassVar[str] = "Media histórica por hora y mes"
 
     def __init__(self, month_window: int = 1, central: str = "mean") -> None:
@@ -104,6 +105,7 @@ class PowerCurve(Model):
     """
 
     name: ClassVar[str] = "power_curve"
+    is_reference: ClassVar[bool] = True
     label: ClassVar[str] = "Curva de potencia sobre el viento previsto"
     feature: ClassVar[str] = "wshub_all_mean"
 
@@ -154,6 +156,7 @@ class Operator(Model):
     """
 
     name: ClassVar[str] = "operator"
+    is_reference: ClassVar[bool] = True
     label: ClassVar[str] = "Previsión del operador"
     unit: ClassVar[Unit] = "mw"
     is_operator: ClassVar[bool] = True

@@ -2,13 +2,23 @@
 
 from predico50hz.models.base import Model, Prediction
 from predico50hz.models.baselines import Climatology, Operator, PowerCurve
-from predico50hz.models.lgbm import LightGBM
+from predico50hz.models.lgbm import LightGBM, LightGBMCQR
 
 MODELS: dict[str, type[Model]] = {
     Climatology.name: Climatology,
     PowerCurve.name: PowerCurve,
     Operator.name: Operator,
     LightGBM.name: LightGBM,
+    LightGBMCQR.name: LightGBMCQR,
 }
 
-__all__ = ["MODELS", "Climatology", "LightGBM", "Model", "Operator", "PowerCurve", "Prediction"]
+__all__ = [
+    "MODELS",
+    "Climatology",
+    "LightGBM",
+    "LightGBMCQR",
+    "Model",
+    "Operator",
+    "PowerCurve",
+    "Prediction",
+]

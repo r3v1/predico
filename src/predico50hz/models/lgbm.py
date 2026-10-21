@@ -15,6 +15,7 @@ cambio de un número de árboles honesto por cuantil.
 (`y_*`) ni disponibilidad (`available_at_*`). Los NaN (rachas ausentes) los trata LightGBM.
 """
 
+import datetime as dt
 from typing import Any, ClassVar
 
 import lightgbm as lgb
@@ -23,6 +24,7 @@ import polars as pl
 
 from predico50hz.features.registry import META, TARGETS
 from predico50hz.models.base import Array, Model, Prediction
+from predico50hz.models.cqr import MIN_DAYS, PUBLICATION_DELAY, WINDOW_DAYS, CQRConfig
 
 QUANTILES: dict[str, float] = {"q10": 0.1, "q50": 0.5, "q90": 0.9}
 EXCLUDED = {*META, *TARGETS}
@@ -177,3 +179,37 @@ class LightGBM(Model):
             "feature_importance": pl.DataFrame(self._importance),
             "lgbm_early_stopping": pl.DataFrame(self._info),
         }
+
+
+class LightGBMCQR(LightGBM):
+    """LightGBM v0.1 más calibración conformal (CQR) de Q10 y Q90 sobre una ventana móvil.
+
+    Es el mismo modelo (mismas predicciones brutas); el marco aplica después `models/cqr.py` con
+    los residuos de las predicciones walk-forward anteriores, sin look-ahead. Solo sirve para
+    la validación walk-forward: el periodo reservado necesitaría un historial de predicciones
+    previo que esa ejecución no tiene.
+    """
+
+    name: ClassVar[str] = "lgbm_cqr"
+    label: ClassVar[str] = "Modelo de árboles LightGBM con calibración conformal (CQR)"
+
+    def __init__(
+        self,
+        *,
+        cqr_window_days: int = WINDOW_DAYS,
+        cqr_min_days: int = MIN_DAYS,
+        cqr_publication_delay_hours: float = PUBLICATION_DELAY.total_seconds() / 3600.0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._cqr = CQRConfig(
+            window_days=cqr_window_days,
+            min_days=cqr_min_days,
+            publication_delay=dt.timedelta(hours=cqr_publication_delay_hours),
+        )
+
+    def cqr_config(self) -> CQRConfig:
+        return self._cqr
+
+    def params(self) -> dict[str, Any]:
+        return {**super().params(), "cqr": self._cqr.as_dict()}

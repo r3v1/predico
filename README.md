@@ -242,7 +242,7 @@ uv run python -m predico50hz.evaluation report                            # scor
 MLFLOW_ALLOW_FILE_STORE=true uvx --from 'mlflow==3.17.2' mlflow ui --backend-store-uri file:data/mlflow
 ```
 
-Métricas como Predico, en MW: RMSE del Q50, Winkler medio (α = 0,2), cobertura del 80 %, error de pico y días ganados al operador. El `scorecard.json` da el veredicto «mejora / empeora / igual» y el estado de G1, y alimenta el capítulo «¿Mejora el pronóstico?» del informe ejecutivo. Validación dic 2025 – jul 2026 (RMSE del Q50): operador 931 MW, curva de potencia 1 197 MW, LightGBM v0.1 sin optimizar 1 233 MW (cobertura 64 %), climatología 3 406 MW. Cada ejecución se registra en MLflow (`data/mlflow`, con `mlflow-skinny`) con la versión de la tabla oro y el snapshot del bronce NWP. Detalle en `docs/f4-backtest.md`.
+Métricas como Predico, en MW: RMSE del Q50, Winkler medio (α = 0,2), cobertura del 80 %, error de pico y días ganados al operador. El `scorecard.json` da el veredicto «mejora / empeora / igual» y el estado de G1, y alimenta el capítulo «¿Mejora el pronóstico?» del informe ejecutivo. Validación dic 2025 – jul 2026 (RMSE del Q50): operador 931 MW, curva de potencia 1 197 MW, LightGBM v0.1 sin optimizar 1 233 MW (cobertura 64 %; con calibración conformal CQR, `lgbm_cqr`, 79,8 % y Winkler −4,4 %), climatología 3 406 MW. Cada ejecución se registra en MLflow (`data/mlflow`, con `mlflow-skinny`) con la versión de la tabla oro y el snapshot del bronce NWP. Detalle en `docs/f4-backtest.md`.
 
 ## Estructura
 

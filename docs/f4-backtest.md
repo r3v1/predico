@@ -8,6 +8,7 @@ Cubre F4.1 a F4.3 y las referencias mínimas de F5 (sin persistencia). Código e
 uv run python -m predico50hz.evaluation run --model climatology        # validación walk-forward
 uv run python -m predico50hz.evaluation run --model power_curve
 uv run python -m predico50hz.evaluation run --model operator
+uv run python -m predico50hz.evaluation run --model lgbm_cqr           # LightGBM + calibración conformal (§8.2)
 uv run python -m predico50hz.evaluation run --model power_curve --holdout   # periodo reservado (queda registrado)
 uv run python -m predico50hz.evaluation compare                         # clasificación de las últimas ejecuciones
 uv run python -m predico50hz.evaluation report                          # scorecard.json + PNG
@@ -26,6 +27,7 @@ Opciones de `run`: `--min-train-months N` (3 por defecto), `--param clave=valor`
 | `evaluation/scorecard.py`, `plots.py`, `report.py` | Cuadro de mando y gráficos para negocio |
 | `models/base.py` | Interfaz `Model` / `Prediction` |
 | `models/baselines.py` | `climatology`, `power_curve`, `operator` |
+| `models/cqr.py` | Calibración conformal (CQR) de Q10 y Q90; la usa `lgbm_cqr` (§8.2) |
 | `report/backtest.py` | Capítulo del informe ejecutivo |
 
 ## 2. Métricas (todas en MW, sobre cuartos de hora)
@@ -143,12 +145,53 @@ Las referencias se volvieron a evaluar con la tabla oro versión 3 y dan las mis
 
 LightGBM funciona de punta a punta pero aún no bate a la curva de potencia (+3 % de RMSE) y su intervalo es demasiado estrecho (cobertura 64 % frente al 80 % objetivo). Sesgo +38,4 MW; error de pico 1 197,9 MW y desfase del pico 3,7 h. Variables con más ganancia en Q50: `ws100_all_ctrl`, `wshub_land_mean`, `wshub_all_mean`, `v3_land_ctrl` y `ws100_land_ctrl`. Los árboles usados varían mucho entre pliegues (Q50 de 43 a 285; Q10 de 77 a 500): con un tramo de parada temprana de pocos días la elección es ruidosa. Son los puntos de partida para Optuna (ADR 0015) y la calibración conformal (ADR 0014).
 
+### 8.2 Calibración conformal (CQR) de Q10 y Q90 (ejecución del 2026-10-21, tabla oro versión Delta 3)
+
+`models/cqr.py` (#27) y el modelo `lgbm_cqr` (`uv run python -m predico50hz.evaluation run --model lgbm_cqr`). Es el mismo LightGBM v0.1 (mismas predicciones brutas, mismo Q50) con los intervalos corregidos por una CQR propia (ADR 0014, sin MAPIE).
+
+**Método.**
+
+1. Puntuación de conformidad por cuarto de hora, en factor de capacidad: `E = max(q10 − y, y − q90) / capacidad`. Es positiva si la realidad cae fuera del intervalo y negativa si cae dentro.
+2. `Q̂` = cuantil empírico de nivel `ceil((n + 1)(1 − α)) / n` de los `n` residuos de la ventana, con `α = 0,2` (`ALPHA` de `metrics.py`). Es la corrección de muestra finita; si el índice supera `n` no se calibra.
+3. Ajuste simétrico `[q10 − Q̂·cap, q90 + Q̂·cap]`. `Q̂` **nunca se recorta**: puede ser negativo (el intervalo se estrecha). Tras ajustar se fuerza `q10 ≤ q50 ≤ q90` y `0 ≤ q ≤ capacidad` igual que el resto del marco (`finalize` y el esquema Pandera).
+
+**Ventana y ausencia de look-ahead (ADR 0009).** Para el cierre de `D` (15:00 de Berlín, objetivo `D+1`) la ventana son los 60 cierres consecutivos que terminan en el último cuya realidad estaba publicada antes de ese cierre. La realidad del objetivo de un cierre `D'` (el día local `D'+1`) está completa a las 00:00 de Berlín de `D'+2` más el retraso de publicación de ENTSO-E (sin medir todavía; se asume 6 h, parámetro `cqr_publication_delay_hours`). Eso es anterior a las 15:00 de `D` solo si `D' ≤ D − 2`: el objetivo de `D − 1` es el propio día `D`, que a las 15:00 solo lleva medio día. **El último día objetivo utilizable es `D − 1`**; ni el día que se pronostica (`D+1`) ni el día `D` entran nunca. `last_usable_issue_date` lo calcula con `features.timing.closure_utc` y `target_window`, sin aritmética a mano. Si la ventana tiene menos de 14 días con residuos (`cqr_min_days`), el día **no se ajusta** y queda marcado (`calibrated = False` en `cqr_adjustment.parquet`).
+
+**De dónde salen los residuos.** De las propias predicciones walk-forward ya hechas: cada día de validación se calibra con lo que el modelo de su pliegue (o el del pliegue anterior, para los primeros días del mes) predijo de días anteriores. Esas predicciones son fuera de muestra, porque ningún pliegue entrena con su mes de validación. Es lo más simple que es honesto: no hace falta validación cruzada dentro del entrenamiento ni reentrenar, y reproduce lo que haría producción (predicciones enviadas más la realidad publicada después). Coste: los primeros 14 días del primer pliegue (15 cierres, 1 440 filas de 23 324) no se calibran y el modelo de los primeros días del mes está algo menos entrenado que el del mes que lo calibra. La ejecución con `--holdout` no está permitida para `lgbm_cqr` (no tendría historial previo de predicciones). Cada ejecución guarda `cqr_adjustment.parquet` (por cierre: ventana, nº de días y residuos, `Q̂` en factor de capacidad) y `cqr_raw_intervals.parquet` (intervalos antes y después de calibrar).
+
+Validación walk-forward (dic 2025 – jul 2026, 23 324 filas, 243 días), ejecuciones `20261021T184616Z-lgbm-validation` y `20261021T184758Z-lgbm_cqr-validation`:
+
+| Modelo | RMSE Q50 (MW) | Winkler | Cobertura 80 % | Ancho medio (MW) |
+|---|---|---|---|---|
+| LightGBM v0.1 | 1 233,1 | 4 184,9 | 64,2 % | 1 991,0 |
+| LightGBM v0.1 + CQR | 1 233,1 | **4 001,9** | **79,8 %** | 2 601,8 |
+
+La cobertura pasa de 64,2 a 79,8 % (dentro de la banda 76–84 % de G1) y el Winkler baja un 4,4 %, aunque el ancho medio sube un 31 %: el exceso fuera del intervalo, que el Winkler multiplica por 10, pesa más que el ancho extra. El Q50 no cambia. `Q̂` osciló entre 0,004 y 0,026 de la capacidad (media 0,013).
+
+Por mes (el pliegue 0 es diciembre; la cobertura mensual es una condición sobre ~2 900 filas muy autocorrelacionadas, no una garantía):
+
+| Mes | Cobertura sin CQR | Cobertura con CQR | Winkler sin CQR | Winkler con CQR | Ancho sin CQR | Ancho con CQR |
+|---|---|---|---|---|---|---|
+| 2025-12 | 65,2 % | 73,9 % | 3 512,8 | 3 445,6 | 1 880,9 | 2 222,2 |
+| 2026-01 | 46,6 % | 63,2 % | 6 531,1 | 5 532,1 | 2 033,2 | 2 771,7 |
+| 2026-02 | 72,5 % | 90,8 % | 5 107,9 | 5 244,4 | 3 499,9 | 4 654,7 |
+| 2026-03 | 62,0 % | 85,8 % | 3 892,3 | 3 767,1 | 1 884,4 | 2 836,1 |
+| 2026-04 | 54,5 % | 74,5 % | 5 218,2 | 4 838,7 | 1 687,0 | 2 254,5 |
+| 2026-05 | 72,1 % | 89,0 % | 2 558,7 | 2 635,0 | 1 497,2 | 2 075,4 |
+| 2026-06 | 68,9 % | 82,1 % | 3 109,0 | 3 065,8 | 1 531,7 | 1 872,8 |
+| 2026-07 | 72,7 % | 79,8 % | 3 637,0 | 3 603,2 | 2 035,1 | 2 290,8 |
+| **Total** | **64,2 %** | **79,8 %** | **4 184,9** | **4 001,9** | **1 991,0** | **2 601,8** |
+
+**Lectura.** El total cumple el criterio de G1 y el Winkler mejora, pero por mes la cobertura sigue entre 63 y 91 %: la CQR corrige el nivel medio con 60 días de atraso y no puede seguir a un modelo cuyo error cambia de un mes a otro. Enero (63,2 %) es el peor: es el mes con más error del modelo (RMSE 1 607 MW) y su ventana solo contiene diciembre (RMSE 819 MW), un mes mucho más fácil. Febrero y mayo se pasan de ancho (91 y 89 %) porque la ventana arrastra residuos de meses peores; el Winkler empeora un 2,7 % y un 3,0 % en esos dos meses. Con el modelo optimizado (Optuna, ADR 0015) los residuos serán más estables y habrá que repetir esta evaluación.
+
+Pruebas: `tests/unit/test_cqr.py` (cuantil con corrección finita, ajuste y mínimo de días con casos a mano, orden y límites, integración en el marco) y `tests/leakage/test_cqr_leakage.py` (alterar la realidad del día objetivo o posterior no cambia el ajuste; de extremo a extremo con el backtest sintético).
+
 ## 9. Limitaciones y no verificado
 
 - **Persistencia fuera:** exige conocer hasta qué hora hay generación publicada antes del cierre, que no está medida (F2.5/F2.7). El ADR 0017 la pide; queda pendiente.
 - **Operador:** solo hay su valor central (sin Winkler ni cobertura) y la serie de `silver` es la **última revisión** descargada (2026-10-16), no necesariamente la que había publicada el día antes: puede ser algo mejor que la real. Su hora de publicación sigue sin medirse.
 - **Holdout de verano-otoño con poco viento** (`y_cf` medio 0,181 frente a 0,203 en train): no garantiza diciembre. La validación solo tiene un invierno, y ya forma parte del entrenamiento a partir de febrero: con 13 meses los modelos no han visto nunca el mismo mes natural previo (por eso la climatología usa los meses vecinos ±1 y, si no hay, todo el entrenamiento).
-- **Cobertura en meses sueltos** oscila entre 69 y 83 %: con ~2 900 filas por mes y autocorrelación fuerte, la banda 76–84 % del total es una condición sobre 8 meses, no una garantía por mes. La calibración conformal (F6) queda para el modelo definitivo.
+- **Cobertura en meses sueltos** oscila entre 69 y 83 %: con ~2 900 filas por mes y autocorrelación fuerte, la banda 76–84 % del total es una condición sobre 8 meses, no una garantía por mes. La CQR (§8.2) lleva el total al 79,8 %, pero por mes sigue entre 63 y 91 %.
 - El **denominador** (`y_cap_mw`) usa MaStR con altas registradas a posteriori (`docs/f3-features.md` §11), igual para modelo y operador (el operador se compara en MW, sin conversión).
 - Las clasificaciones se hacen con una única tabla oro (410 cierres); al ampliar el histórico (etapa 3) los pliegues cambiarán y habrá que repetir las ejecuciones.
 - El contador del holdout detecta mirar demasiado, no lo impide; las ejecuciones se pueden borrar a mano de `data/backtest/`, pero el registro `holdout_log.jsonl` es de solo añadir.

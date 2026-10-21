@@ -36,6 +36,7 @@ from predico50hz.features.config import DEFAULT_GOLD
 from predico50hz.models import MODELS
 from predico50hz.models.base import Array, Model, Prediction
 from predico50hz.models.baselines import DEFAULT_OPERATOR, load_operator_mw
+from predico50hz.models.cqr import calibrate_frame
 
 LOCKFILE = "uv.lock"
 KEY = ["forecast_issue_date", "ts_utc"]
@@ -188,6 +189,11 @@ def run_backtest(  # noqa: PLR0912, PLR0913, PLR0915
     if model_name not in MODELS:
         raise KeyError(f"modelo desconocido {model_name!r}; disponibles: {sorted(MODELS)}")
     cls = MODELS[model_name]
+    if holdout and cls(**(model_params or {})).cqr_config() is not None:
+        raise ValueError(
+            f"{model_name!r} usa calibración conformal, que necesita el historial de predicciones "
+            "walk-forward previo: solo se admite en la validación, no con --holdout"
+        )
     t0 = time.monotonic()
     df, version = table if table is not None else load_gold(gold)
     op = load_operator_mw(operator)
@@ -248,6 +254,20 @@ def run_backtest(  # noqa: PLR0912, PLR0913, PLR0915
     if not parts:
         raise ValueError("sin pliegues evaluables (¿faltan filas de desarrollo?)")
     preds = pl.concat(parts)
+    cqr = model.cqr_config()
+    cqr_info: dict[str, Any] | None = None
+    if cqr is not None:
+        preds, adj = calibrate_frame(preds, cqr)
+        artifacts["cqr_adjustment"] = [adj]
+        artifacts["cqr_raw_intervals"] = [
+            preds.select(*KEY, "q10_raw_mw", "q90_raw_mw", "q10_mw", "q90_mw")
+        ]
+        preds = preds.select(PRED_COLUMNS)
+        cqr_info = {
+            **cqr.as_dict(),
+            "n_days_calibrated": int(adj["calibrated"].sum()),
+            "n_days_uncalibrated": int((~adj["calibrated"]).sum()),
+        }
     validate_predictions(preds, pl.concat(expected))
     metrics = _metrics_block(preds, fold_info, rank=not cls.is_operator)
 
@@ -284,6 +304,7 @@ def run_backtest(  # noqa: PLR0912, PLR0913, PLR0915
         "n_values_clipped_or_reordered": changed_total,
         "holdout_evaluations_before": prior,
         "operator_source": str(operator),
+        "cqr": cqr_info,
     }
     record = RunRecord(
         run_id=run_id,

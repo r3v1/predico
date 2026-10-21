@@ -19,6 +19,8 @@ import numpy as np
 import numpy.typing as npt
 import polars as pl
 
+from predico50hz.models.cqr import CQRConfig
+
 Array = npt.NDArray[np.float64]
 Unit = Literal["cf", "mw"]
 
@@ -63,6 +65,14 @@ class Model(ABC):
     @abstractmethod
     def fit(self, train: pl.DataFrame) -> None:
         """Entrena con filas de la tabla oro (con `y_cf`, `y_gen_mw`...)."""
+
+    def cqr_config(self) -> CQRConfig | None:
+        """Calibración conformal que el marco aplica tras todos los pliegues (`None`: ninguna).
+
+        Los modelos con intervalo que devuelvan una configuración reciben la CQR de
+        `models/cqr.py` sobre sus propias predicciones walk-forward (ver su docstring).
+        """
+        return None
 
     def artifacts(self) -> dict[str, pl.DataFrame]:
         """Tablas opcionales de la última `fit` (p. ej. importancia de variables).

@@ -1,14 +1,20 @@
 # ruff: noqa: PLR2004, PT011
 import datetime as dt
 import hashlib
+import threading
+import time
+from types import SimpleNamespace
 
 import numpy as np
 import pyarrow.parquet as pq
 import pytest
 import xarray as xr
 
+from predico50hz.ingest.dynamical import __main__ as relleno
+from predico50hz.ingest.dynamical import rebuild_silver as rs
 from predico50hz.ingest.dynamical.bronze import BronzeStore, init_pos
 from predico50hz.ingest.dynamical.config import LEAD_HOURS, N_MEMBERS, SPEEDS, VARIABLES, Domain
+from predico50hz.ingest.dynamical.pipeline import PassMetrics
 from predico50hz.ingest.dynamical.rebuild_silver import (
     META_BRONZE_DIGEST,
     META_CENTROIDS_SHA,
@@ -31,6 +37,7 @@ from predico50hz.ingest.dynamical.source import (
     read_cube,
 )
 from predico50hz.ingest.ifs.extract import Point, load_points
+from predico50hz.orchestration import locks
 
 DOM = Domain(49.5, 56.0, 8.5, 16.0)
 
@@ -252,3 +259,125 @@ def test_rebuild_silver_does_not_write_bronze(tmp_path) -> None:
     cfile = _centroids_file(tmp_path / "c.yaml", [("a", 53.0, 13.0)])
     rebuild(day, day, tmp_path / "bronze", tmp_path / "silver", cfile)
     assert BronzeStore(tmp_path / "bronze").repo.lookup_branch("main") == before
+
+
+# --- lock nwp-bronze: relleno y reconstrucción de plata (sin red) ----------------------------
+
+
+@pytest.fixture(autouse=True)
+def _locks_aislados(tmp_path, monkeypatch) -> None:
+    """Los tests nunca usan el lock real (data/ops/locks), que comparte nwp-daily."""
+    monkeypatch.setenv("PREDICO_LOCK_DIR", str(tmp_path / "locks"))
+
+
+class _Raiz:
+    """Raíz de bronce falsa: todas las pasadas figuran como ingeridas."""
+
+    def __init__(self) -> None:
+        self.attrs: dict[str, str] = {}
+
+    def __getitem__(self, key: str) -> list[bool]:
+        return [True] * 2000
+
+
+def _argv_relleno(tmp_path, lock_dir) -> list[str]:
+    return [
+        "--start",
+        "2026-10-03",
+        "--end",
+        "2026-10-04",
+        "--bronze",
+        str(tmp_path / "bronze"),
+        "--silver",
+        str(tmp_path / "silver"),
+        "--centroids",
+        "centroids.yaml",
+        "--metrics",
+        str(tmp_path / "metricas.json"),
+        "--lock-dir",
+        str(lock_dir),
+    ]
+
+
+def _relleno_con_fakes(monkeypatch, orden: list[str]) -> None:
+    fuente = SimpleNamespace(href="fake://", snapshot_id="SNAP", dataset_version="0.1.0")
+    monkeypatch.setattr(relleno, "open_source", lambda *a, **k: fuente)
+    monkeypatch.setattr(relleno, "load_points", lambda *a, **k: [])
+    monkeypatch.setattr(
+        relleno,
+        "BronzeStore",
+        lambda *a, **k: SimpleNamespace(is_ingested=lambda d: False, disk_bytes=lambda: 0),
+    )
+    monkeypatch.setattr(relleno, "read_stage", lambda src, cfg, d: f"lectura {d}")
+
+    def write_falso(rr, src, cfg, d):
+        orden.append(f"escribe {d}")
+        return PassMetrics(d.isoformat())
+
+    monkeypatch.setattr(relleno, "write_stage", write_falso)
+
+
+def test_relleno_espera_al_lock_nwp_bronze_antes_de_escribir(tmp_path, monkeypatch) -> None:
+    lock_dir = tmp_path / "locks"
+    monkeypatch.setenv("PREDICO_LOCK_TIMEOUT_S", "10")
+    orden: list[str] = []
+    _relleno_con_fakes(monkeypatch, orden)
+    ocupado = threading.Event()
+
+    def nwp_daily_simulado() -> None:
+        # tiene el lock unos 0,5 s; "libera" se anota antes de soltarlo
+        with locks.file_lock(lock_dir, locks.NWP_BRONZE, timeout_s=5):
+            ocupado.set()
+            time.sleep(0.5)
+            orden.append("libera")
+
+    tenedor = threading.Thread(target=nwp_daily_simulado)
+    tenedor.start()
+    ocupado.wait(5)
+    hilo = threading.Thread(target=relleno.main, args=(_argv_relleno(tmp_path, lock_dir),))
+    hilo.start()
+    time.sleep(0.2)
+    assert hilo.is_alive()
+    assert orden == []  # el relleno no escribe mientras el lock está ocupado
+    tenedor.join()
+    hilo.join(10)
+    assert not hilo.is_alive()
+    assert orden == ["libera", "escribe 2026-10-03", "escribe 2026-10-04"]
+
+
+def test_relleno_falla_con_lock_timeout_si_el_lock_no_se_libera(tmp_path, monkeypatch) -> None:
+    lock_dir = tmp_path / "locks"
+    monkeypatch.setenv("PREDICO_LOCK_TIMEOUT_S", "0.3")
+    orden: list[str] = []
+    _relleno_con_fakes(monkeypatch, orden)
+    argv = _argv_relleno(tmp_path, lock_dir)
+    with (
+        locks.file_lock(lock_dir, locks.NWP_BRONZE, timeout_s=5),
+        pytest.raises(locks.LockTimeoutError),
+    ):
+        relleno.main(argv)
+    assert orden == []
+
+
+def test_reconstruccion_de_plata_espera_al_lock_antes_de_escribir(tmp_path, monkeypatch) -> None:
+    lock_dir = tmp_path / "locks"
+    escritas: list[str] = []
+    monkeypatch.setattr(rs, "open_bronze_ro", lambda *a, **k: (_Raiz(), "SNAP"))
+    monkeypatch.setattr(rs, "load_points", lambda *a, **k: [])
+    monkeypatch.setattr(rs, "_file_sha", lambda p: "0")
+    monkeypatch.setattr(rs, "bronze_cube", lambda root, day: SimpleNamespace(init=None))
+    monkeypatch.setattr(rs, "bronze_pass_digest", lambda cube: "d")
+    monkeypatch.setattr(rs, "silver_meta", lambda p: {})
+    monkeypatch.setattr(rs, "build_table", lambda *a, **k: "tabla")
+    monkeypatch.setattr(rs, "write_silver", lambda tabla, root, d: escritas.append(d))
+    day = dt.date(2026, 10, 3)
+    args = (day, day, tmp_path / "bronze", tmp_path / "silver", "centroids.yaml")
+    with (
+        locks.file_lock(lock_dir, locks.NWP_BRONZE, timeout_s=5),
+        pytest.raises(locks.LockTimeoutError),
+    ):
+        rebuild(*args, workers=1, lock_dir=lock_dir, lock_timeout_s=0.3)
+    assert escritas == []
+    # libre el lock, la misma reconstrucción escribe
+    assert rebuild(*args, workers=1, lock_dir=lock_dir, lock_timeout_s=0.3)[0].status == "ok"
+    assert escritas == ["2026-10-03"]

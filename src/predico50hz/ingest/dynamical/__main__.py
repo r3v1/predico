@@ -21,6 +21,8 @@ from predico50hz.ingest.dynamical.config import (
 from predico50hz.ingest.dynamical.pipeline import Config, net_rx_bytes, read_stage, write_stage
 from predico50hz.ingest.dynamical.source import open_source, read_cube
 from predico50hz.ingest.ifs.extract import load_points
+from predico50hz.orchestration import locks
+from predico50hz.orchestration.settings import get_ops_settings
 
 
 def _date(s: str) -> dt.date:
@@ -58,6 +60,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--snapshot-id", help="fija el snapshot de origen (reproducibilidad)")
     ap.add_argument("--skip-existing", action="store_true", help="omite pasadas ya en bronce")
     ap.add_argument(
+        "--lock-dir",
+        help="directorio de locks (disco local); por defecto, el de los ajustes PREDICO_*",
+    )
+    ap.add_argument(
         "--bench", type=int, nargs="+", help="mide la lectura de --start con estas concurrencias"
     )
     ap.add_argument("--label", default="run")
@@ -77,6 +83,8 @@ def main(argv: list[str] | None = None) -> None:
         out.write_text(json.dumps(doc, indent=1))
         return
 
+    settings = get_ops_settings()
+    lock_dir = Path(args.lock_dir) if args.lock_dir else settings.lock_path
     src = open_source(args.href, args.snapshot_id)
     cfg = Config(
         BronzeStore(args.bronze), Path(args.silver), load_points(args.centroids), args.workers
@@ -89,7 +97,11 @@ def main(argv: list[str] | None = None) -> None:
     with ThreadPoolExecutor(max_workers=max(1, args.init_workers)) as ex:
         futures = [ex.submit(read_stage, src, cfg, d) for d in todo]
         for d, fut in zip(todo, futures, strict=True):
-            m = write_stage(fut.result(), src, cfg, d)
+            rr = fut.result()  # la descarga va sin lock, para no bloquear a nwp-daily
+            # la escritura (bronce + plata) toma el mismo lock que nwp-daily; si no se libera
+            # a tiempo, LockTimeoutError aborta el relleno
+            with locks.file_lock(lock_dir, locks.NWP_BRONZE, settings.lock_timeout_s):
+                m = write_stage(rr, src, cfg, d)
             passes.append(m.as_dict())
             print(
                 f"{m.init_date} {m.status} read={m.read_s:.1f}s ({m.mb_transferred:.0f} MB) "

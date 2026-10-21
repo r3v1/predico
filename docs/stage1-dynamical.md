@@ -14,6 +14,7 @@ Paquete `src/predico50hz/ingest/dynamical/`, lanzado con `uv run python -m predi
 | `pipeline.py` | `read_stage` (lectura + MB de red) y `write_stage` (bronce, plata, hashes) |
 
 Para los puntos de mar el interpolado es el mismo (no hay máscara tierra-mar en dynamical; sigue pendiente, ADR 0003). El CLI admite `--skip-existing` (reanudar) y `--init-workers N` (pasadas leídas a la vez; la escritura sigue siendo secuencial y en orden).
+El relleno toma el lock `nwp-bronze` por pasada, solo durante su escritura (bronce y plata), así que convive con `nwp-daily`: si este tiene el lock, espera hasta `PREDICO_LOCK_TIMEOUT_S` y luego falla.
 
 ## 2. Métricas (7 pasadas, `--workers 5`, secuencial)
 
@@ -48,6 +49,8 @@ Base: 176,6 MB, 6,2 MB de bronce y 59,5 KB de plata por pasada; 15,2 s por pasad
 | Total | 928 | 164 GB | 5,8 GB | 55 MB | 3,9 | 2,4 |
 
 El coste real del histórico está en la **transferencia (164 GB)**, no en el disco ni en la CPU. Son horas, no días.
+
+**Etapa 3 real (issue #24, 2026-10-19).** 518/518 pasadas `ok`, sin errores ni reintentos, en **53 min de pared** (6,1 s por pasada con `--init-workers 4` y `--workers 5`), por debajo de la 1,4 h estimada. Bronce añadido: **3,23 GB** (la estimación de 3,2 GB acierta); plata: **60 MB** (el doble de lo estimado porque ya usa los 21 centroides reales en lugar de 8 puntos). La transferencia por pasada no es atribuible con 4 pasadas concurrentes (el contador de red las mezcla, ver §2), así que se mantiene la estimación de ~91 GB. La racha es NaN hasta la pasada del 2024-11-12 (fracción de NaN 0,10, una de las 10 variables) y deja de serlo el 2024-11-13. La plata se reconstruyó después desde el bronce con `rebuild_silver` (518 pasadas en 91 s con 4 hilos), y el validador F1.6 sobre 2024-04-01 → 2026-10-21 da 934/934 días cubiertos (100 %), sin huecos. La descarga del 19 oct no tomaba el lock `nwp-bronze`; no coincidió con `nwp-daily` (acabó a las 06:58 UTC, `nwp-daily` arranca a las 07:45 UTC) y desde ahora el relleno y `rebuild_silver` lo toman al escribir (§1).
 
 ## 4. Latencia
 

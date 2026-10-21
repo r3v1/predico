@@ -37,6 +37,8 @@ from predico50hz.ingest.dynamical.config import (
 from predico50hz.ingest.dynamical.silver import build_table, silver_path, write_silver
 from predico50hz.ingest.dynamical.source import Cube
 from predico50hz.ingest.ifs.extract import Point, load_points
+from predico50hz.orchestration import locks
+from predico50hz.orchestration.settings import get_ops_settings
 
 META_CENTROIDS = "centroids_file"
 META_CENTROIDS_SHA = "centroids_sha256"
@@ -106,6 +108,8 @@ def rebuild_pass(  # noqa: PLR0913, PLR0917
     points: list[Point],
     silver: Path,
     run_info: dict[str, str],
+    lock_dir: Path,
+    lock_timeout_s: float,
     force: bool = False,
 ) -> RebuildResult:
     t = time.perf_counter()
@@ -118,7 +122,9 @@ def rebuild_pass(  # noqa: PLR0913, PLR0917
     if not force and all(old.get(k) == info[k] for k in (META_CENTROIDS_SHA, META_BRONZE_DIGEST)):
         return RebuildResult(day.isoformat(), "unchanged", time.perf_counter() - t)
     table = build_table(cube, points, cube.init, info)
-    write_silver(table, silver, day.isoformat())
+    # solo la escritura va bajo el lock (build_table es lo caro); nwp-daily escribe la misma plata
+    with locks.file_lock(lock_dir, locks.NWP_BRONZE, lock_timeout_s):
+        write_silver(table, silver, day.isoformat())
     return RebuildResult(day.isoformat(), "ok", time.perf_counter() - t)
 
 
@@ -131,10 +137,15 @@ def rebuild(  # noqa: PLR0913, PLR0917
     workers: int = 4,
     force: bool = False,
     snapshot_id: str | None = None,
+    lock_dir: str | Path | None = None,
+    lock_timeout_s: float | None = None,
 ) -> list[RebuildResult]:
     if end < start:
         raise ValueError("--end anterior a --start")
     _ = (init_pos(start), init_pos(end))
+    ajustes = get_ops_settings()
+    lock_path = Path(lock_dir) if lock_dir else ajustes.lock_path
+    timeout = ajustes.lock_timeout_s if lock_timeout_s is None else lock_timeout_s
     points = load_points(centroids)
     root, snapshot = open_bronze_ro(bronze, snapshot_id)
     run_info = {
@@ -148,7 +159,10 @@ def rebuild(  # noqa: PLR0913, PLR0917
     out: list[RebuildResult] = []
     with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
         futures = [
-            ex.submit(rebuild_pass, root, d, points, Path(silver), run_info, force) for d in days
+            ex.submit(
+                rebuild_pass, root, d, points, Path(silver), run_info, lock_path, timeout, force
+            )
+            for d in days
         ]
         for k, fut in enumerate(futures, 1):
             out.append(fut.result())
@@ -171,6 +185,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--workers", type=int, default=4, help="pasadas calculadas a la vez")
     ap.add_argument("--snapshot-id", help="fija el snapshot de bronce (por defecto, el de main)")
     ap.add_argument("--force", action="store_true", help="regenera aunque los hashes coincidan")
+    ap.add_argument(
+        "--lock-dir",
+        help="directorio de locks (disco local); por defecto, el de los ajustes PREDICO_*",
+    )
     args = ap.parse_args(argv)
     t0 = time.perf_counter()
     res = rebuild(
@@ -182,6 +200,7 @@ def main(argv: list[str] | None = None) -> None:
         args.workers,
         args.force,
         args.snapshot_id,
+        lock_dir=args.lock_dir,
     )
     counts: dict[str, int] = {}
     for r in res:

@@ -2,6 +2,15 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.7"
+    date: 2026-10-21
+    title: El rango ya acierta lo que promete y el archivo meteorológico está completo
+    items:
+      - "El rango del modelo se corrige cada día con los errores de los dos meses anteriores (solo los que ya se conocían antes del cierre). Antes acertaba el 64 % de las veces; ahora el 80 %, justo lo buscado, y la nota que mide la calidad del rango mejora un 4 %."
+      - "Por meses todavía oscila (entre el 63 % y el 91 %): enero se queda corto y febrero y mayo se pasan. Se revisará cuando el modelo esté afinado."
+      - "El archivo de previsión meteorológica ya empieza en abril de 2024: dos años y medio, 934 días, todos completos y revisados sin ningún hueco."
+      - "Las descargas de días antiguos ya no pueden pisarse con la descarga diaria aunque coincidan en el tiempo."
+      - "Una prueba nueva recorre toda la cadena, desde los datos de origen hasta las métricas, con datos de mentira. Se ejecuta sola en cada cambio del código."
   - version: "0.6"
     date: 2026-10-21
     title: Primer modelo propio, todavía sin afinar

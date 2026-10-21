@@ -25,6 +25,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      # cfgrib/eccodes necesitan la librería de sistema ecCodes.
+      - name: Instalar ecCodes
+        run: sudo apt-get update -q && sudo apt-get install -y -q libeccodes-dev
+
       # torch viene del índice CUDA (pytorch-cu130): ~4 GB con las libs nvidia y ningún código
       # ni test lo importa todavía. Se omite junto a su cadena CUDA; quitar esta lista cuando
       # se use torch en el código.

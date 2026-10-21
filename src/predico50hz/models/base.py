@@ -62,6 +62,14 @@ class Model(ABC):
     def fit(self, train: pl.DataFrame) -> None:
         """Entrena con filas de la tabla oro (con `y_cf`, `y_gen_mw`...)."""
 
+    def artifacts(self) -> dict[str, pl.DataFrame]:
+        """Tablas opcionales de la última `fit` (p. ej. importancia de variables).
+
+        El marco las junta por pliegue (columna `fold`) y las guarda como
+        `<nombre>.parquet` en el directorio de la ejecución.
+        """
+        return {}
+
     @abstractmethod
     def predict(self, df: pl.DataFrame) -> Prediction:
         """Pronostica una fila por fila de `df` (sin columnas `y_*`)."""

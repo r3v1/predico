@@ -168,7 +168,7 @@ def _metrics_block(
     }
 
 
-def run_backtest(  # noqa: PLR0913, PLR0915
+def run_backtest(  # noqa: PLR0912, PLR0913, PLR0915
     model_name: str,
     *,
     holdout: bool = False,
@@ -216,6 +216,7 @@ def run_backtest(  # noqa: PLR0913, PLR0915
     fold_info: list[dict[str, Any]] = []
     expected: list[pl.DataFrame] = []
     changed_total = 0
+    artifacts: dict[str, list[pl.DataFrame]] = {}
     model: Model = cls(**params)
     for index, train, valid, f in plan:
         train_ok = train.drop_nulls("y_cf")
@@ -229,6 +230,10 @@ def run_backtest(  # noqa: PLR0913, PLR0915
         parts.append(frame)
         expected.append(valid_ok.select(KEY))
         changed_total += changed
+        for art, table_art in model.artifacts().items():
+            artifacts.setdefault(art, []).append(
+                table_art.with_columns(pl.lit(index, dtype=pl.Int64).alias("fold"))
+            )
         fold_info.append(
             {
                 "fold": index,
@@ -256,6 +261,11 @@ def run_backtest(  # noqa: PLR0913, PLR0915
         n += 1
         run_id = f"{stamp}-{model_name}-{mode}-{n}"
         directory = runs_root(root) / run_id
+
+    if artifacts:
+        directory.mkdir(parents=True, exist_ok=True)
+        for art, frames in artifacts.items():
+            pl.concat(frames, how="diagonal").write_parquet(directory / f"{art}.parquet")
 
     prior = holdout_count(root, model_name) if holdout else None
     prior_total = holdout_count(root)

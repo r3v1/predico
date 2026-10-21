@@ -323,8 +323,13 @@ def _entsoe_argv(settings: OpsSettings, dataset: str, days: int) -> list[str]:
     ]
 
 
-def _entsoe(
-    settings: OpsSettings, job: str, datasets: list[str], days: int, vacuum: bool = False
+def _entsoe(  # noqa: PLR0913, PLR0917
+    settings: OpsSettings,
+    job: str,
+    datasets: list[str],
+    days: int,
+    vacuum: bool = False,
+    after: Callable[[Run], None] | None = None,
 ) -> None:
     from predico50hz.ingest.entsoe.__main__ import main as entsoe_main  # noqa: PLC0415
 
@@ -351,6 +356,8 @@ def _entsoe(
                     ph.detail["files_removed"] = vacuum_silver(settings)
             except Exception as e:  # mantenimiento: se anota la fase, pero no es un fallo del job
                 run.details["vacuum_error"] = summarize_error(e)
+        if after is not None:
+            after(run)
         if errors:
             raise JobError("; ".join(errors))
 
@@ -381,8 +388,43 @@ def entsoe_daily(settings: OpsSettings, days: int = 3) -> None:
     _entsoe(settings, "entsoe-daily", ["all"], days, vacuum=True)
 
 
-def entsoe_hourly(settings: OpsSettings, days: int = 2) -> None:
-    _entsoe(settings, "entsoe-hourly", ["prices", "forecast"], days)
+def _probe_generation(
+    settings: OpsSettings, now: dt.datetime, client_factory: Callable[[], Any] | None = None
+) -> dict[str, Any]:
+    """Consulta ligera del último paso de generación real publicado y lo anota."""
+    from predico50hz.ingest.entsoe.client import EntsoeClient  # noqa: PLC0415
+    from predico50hz.settings import get_settings  # noqa: PLC0415
+
+    if client_factory is None:
+        key = get_settings().entsoe_api_key
+        if key is None:
+            raise JobError("falta ENTSOE_API_KEY en .env")
+        client_factory = lambda: EntsoeClient(key.get_secret_value())  # noqa: E731
+    client = client_factory()
+    try:
+        obs = publication.probe_generation(client, now)
+    finally:
+        client.close()
+    publication.append_observation(settings.generation_lag_path, obs)
+    return obs
+
+
+def entsoe_hourly(
+    settings: OpsSettings,
+    days: int = 2,
+    now: dt.datetime | None = None,
+    client_factory: Callable[[], Any] | None = None,
+) -> None:
+    def probe(run: Run) -> None:
+        # la medida de generación no hace fallar el job: el fallo queda en los detalles
+        try:
+            with locks.file_lock(settings.lock_path, locks.ENTSOE, settings.lock_timeout_s):
+                obs = _probe_generation(settings, now or dt.datetime.now(dt.UTC), client_factory)
+            run.details["generation_last_step"] = obs["last_step"]
+        except Exception as e:
+            run.details["generation_error"] = summarize_error(e)
+
+    _entsoe(settings, "entsoe-hourly", ["prices", "forecast"], days, after=probe)
 
 
 # -- publication-times -----------------------------------------------------------------------
@@ -397,7 +439,9 @@ def publication_times(
     since = since or now.date() - dt.timedelta(days=60)
     with Run(settings, "publication-times", now.date()) as run:
         with run.phase("compute"):
-            res = publication.compute(settings.entsoe_bronze_path, since, now, previous)
+            res = publication.compute(
+                settings.entsoe_bronze_path, since, now, previous, settings.generation_lag_path
+            )
         out.parent.mkdir(parents=True, exist_ok=True)
         tmp = Path(str(out) + ".tmp")
         tmp.write_text(json.dumps(res, indent=2, ensure_ascii=False))

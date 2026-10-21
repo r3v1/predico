@@ -78,6 +78,10 @@ class OpsSettings(BaseSettings):
         return self.ops_path / "publication_times.json"
 
     @property
+    def generation_lag_path(self) -> Path:
+        return self.ops_path / "generation_lag.jsonl"
+
+    @property
     def nwp_silver_path(self) -> Path:
         return self.nwp_silver or self.data_dir / "silver" / "ifs_ens_clusters"
 

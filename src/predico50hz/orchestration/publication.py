@@ -20,6 +20,8 @@ import polars as pl
 
 from predico50hz.features.timing import closure_utc, target_grid
 from predico50hz.ingest.entsoe.bronze import list_chunks, read_chunk
+from predico50hz.ingest.entsoe.client import EntsoeClient, NoDataError
+from predico50hz.ingest.entsoe.datasets import DATASETS as ENTSOE_DATASETS
 from predico50hz.ingest.entsoe.datasets import WIND_OFFSHORE, WIND_ONSHORE
 from predico50hz.ingest.entsoe.parse import parse_raw
 
@@ -179,7 +181,11 @@ def summarize(days: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def compute(
-    bronze: Path, since: dt.date, now: dt.datetime, previous: dict[str, Any] | None = None
+    bronze: Path,
+    since: dt.date,
+    now: dt.datetime,
+    previous: dict[str, Any] | None = None,
+    observations: Path | None = None,
 ) -> dict[str, Any]:
     """Medida de todos los cierres desde `since` hasta hoy. Reutiliza los días ya medidos."""
     today = now.date()
@@ -204,7 +210,158 @@ def compute(
         # los días sin ninguna descarga no aportan nada al listado
         days = [x for x in days if x["status"] != "no_fetches"]
         result["datasets"][dataset] = {"summary": summarize(days), "days": days}
+    if observations is not None:
+        result["generation_lag"] = lag_report(read_observations(observations), since, now)
     return result
+
+
+# -- retraso de la generación real publicada (issue #11) -----------------------------------------
+
+LAG_WINDOW = dt.timedelta(hours=36)  # ventana de la consulta ligera
+LAG_STALE_MIN = 90  # una observación más vieja que esto antes del cierre no representa el cierre
+LAG_WARNING = (
+    "Generación real B18+B19 (A75/A16, 50Hertz). `last_step` es el INICIO del último cuarto de "
+    "hora con dato en ambos tipos (el menor de los dos). El retraso es `observado_en - last_step`; "
+    "por cierre se toma la última observación anterior al cierre y se mide `cierre - last_step`."
+)
+
+
+def last_published_step(raws: list[bytes]) -> dict[str, Any]:
+    """Último cuarto con valor en B18 y B19 de respuestas A75; `last_step` es el menor."""
+    df = pl.concat([parse_raw(r) for r in raws]).filter(
+        pl.col("value").is_not_null() & ~pl.col("implied")
+    )
+    last: dict[str, dt.datetime | None] = {}
+    for psr in (WIND_OFFSHORE, WIND_ONSHORE):
+        sub = df.filter(pl.col("psr_type") == psr)
+        if sub.is_empty():
+            last[psr] = None
+            continue
+        row = sub.sort("ts_utc").tail(1).row(0, named=True)
+        # una fila horaria cubre cuatro cuartos: el último empieza 45 min después
+        last[psr] = row["ts_utc"] + QUARTER * (max(1, (row["resolution_min"] or 15) // 15) - 1)
+    steps = [v for v in last.values() if v is not None]
+    both = len(steps) == len(last)
+    return {
+        "last_step": min(steps).isoformat(timespec="minutes") if both else None,
+        "last_b18": _iso(last[WIND_OFFSHORE]),
+        "last_b19": _iso(last[WIND_ONSHORE]),
+    }
+
+
+def _iso(t: dt.datetime | None) -> str | None:
+    return t.isoformat(timespec="minutes") if t else None
+
+
+def probe_generation(client: EntsoeClient, now: dt.datetime) -> dict[str, Any]:
+    """Consulta ligera (últimas 36 h, B18 y B19) y devuelve la observación a guardar."""
+    ds = ENTSOE_DATASETS["generation"]
+    start = (now - LAG_WINDOW).replace(minute=0, second=0, microsecond=0)
+    end = now.replace(minute=0, second=0, microsecond=0) + dt.timedelta(hours=2)
+    frames: list[bytes] = []
+    for psr in ds.variants:
+        try:
+            frames.append(client.fetch({**ds.params, "psrType": psr}, start, end))
+        except NoDataError:
+            continue
+    obs = {"observed_at": now.isoformat(timespec="seconds"), "last_step": None}
+    if not frames:
+        return obs | {"last_b18": None, "last_b19": None}
+    return obs | last_published_step(frames)
+
+
+def append_observation(path: Path, obs: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(obs, ensure_ascii=False) + "\n")
+
+
+def read_observations(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue  # línea truncada por un corte: se ignora
+    return out
+
+
+def lag_minutes(obs: dict[str, Any]) -> float | None:
+    if not obs.get("last_step"):
+        return None
+    seen = dt.datetime.fromisoformat(obs["observed_at"])
+    return round((seen - dt.datetime.fromisoformat(obs["last_step"])).total_seconds() / 60, 1)
+
+
+def _lag_stats(values: list[float]) -> dict[str, Any]:
+    if not values:
+        return {"n": 0}
+    return {"n": len(values), "median_min": statistics.median(values), "max_min": max(values)}
+
+
+def lag_report(obs: list[dict[str, Any]], since: dt.date, now: dt.datetime) -> dict[str, Any]:
+    """Retraso por observación (resumen) y, por cierre, el último paso visto antes del cierre."""
+    lo = dt.datetime.combine(since, dt.time(0), tzinfo=dt.UTC)
+    parsed = sorted(
+        ((dt.datetime.fromisoformat(o["observed_at"]), o) for o in obs), key=lambda x: x[0]
+    )
+    parsed = [(t, o) for t, o in parsed if t >= lo]
+    lags = [x for _, o in parsed if (x := lag_minutes(o)) is not None]
+    days: list[dict[str, Any]] = []
+    d = since
+    while d <= now.date():
+        close = closure_utc(d)
+        before = [(t, o) for t, o in parsed if t <= close]
+        row: dict[str, Any] = {"closure_day": d.isoformat(), "closure_utc": _iso(close)}
+        if not before or (close - before[-1][0]).total_seconds() / 60 > LAG_STALE_MIN:
+            if close <= now and parsed:
+                days.append(row | {"status": "no_observation"})
+            d += dt.timedelta(days=1)
+            continue
+        t, o = before[-1]
+        if not o.get("last_step"):
+            days.append(row | {"status": "no_data", "observed_at": t.isoformat(timespec="seconds")})
+        else:
+            step = dt.datetime.fromisoformat(o["last_step"])
+            days.append(
+                row
+                | {
+                    "status": "measured",
+                    "observed_at": t.isoformat(timespec="seconds"),
+                    "last_step": o["last_step"],
+                    "lag_at_closure_min": round((close - step).total_seconds() / 60, 1),
+                }
+            )
+        d += dt.timedelta(days=1)
+    at_close = [x["lag_at_closure_min"] for x in days if x["status"] == "measured"]
+    return {
+        "warning": LAG_WARNING,
+        "n_observations": len(parsed),
+        "per_observation": _lag_stats(lags),
+        "at_closure": _lag_stats(at_close),
+        "days": days,
+    }
+
+
+def _render_lag(lag: dict[str, Any]) -> list[str]:
+    po, ac = lag["per_observation"], lag["at_closure"]
+    lines = ["\n[generación real B18+B19] " + f"observaciones={lag['n_observations']}"]
+    if po["n"]:
+        lines.append(
+            f"  retraso (observado - paso) mediana/peor: {po['median_min']} / {po['max_min']} min"
+        )
+    if ac["n"]:
+        lines.append(f"  retraso al cierre mediana/peor: {ac['median_min']} / {ac['max_min']} min")
+    for x in lag["days"]:
+        extra = (
+            f"  último paso={x['last_step']} retraso={x['lag_at_closure_min']} min"
+            if x["status"] == "measured"
+            else ""
+        )
+        lines.append(f"  cierre {x['closure_day']}: {x['status']}{extra}")
+    return lines
 
 
 def render(result: dict[str, Any]) -> str:
@@ -230,4 +387,6 @@ def render(result: dict[str, Any]) -> str:
                     else ""
                 )
             )
+    if "generation_lag" in result:
+        lines += _render_lag(result["generation_lag"])
     return "\n".join(lines)

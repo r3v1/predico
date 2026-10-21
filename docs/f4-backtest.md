@@ -129,6 +129,20 @@ Otras métricas de la curva de potencia en validación: MAE 778,7 MW (operador 6
 
 Comprobación independiente: el día 2026-03-10 de la curva de potencia, recalculado con Python puro sobre `predictions.parquet`, da RMSE 481,811 MW, Winkler 1 814,787 y cobertura 0,875, idénticos a `summarize`.
 
+### 8.1 LightGBM v0.1 sin optimizar (ejecución del 2026-10-21, tabla oro versión Delta 3)
+
+`models/lgbm.py` (#17): tres modelos LightGBM sobre `y_cf`, Q50 con pérdida L2 y Q10/Q90 con pérdida cuantílica (α 0,1 y 0,9). Variables: toda columna numérica que no sea meta (`features.registry.META`), objetivo (`y_*`) ni disponibilidad (`available_at_*`). **Parada temprana sin look-ahead:** con el último 15 % de los días del propio entrenamiento (mínimo 7, días completos, cronológico); nunca con el pliegue de validación, y el modelo no se reentrena con ese tramo. Hiperparámetros por defecto: `learning_rate` 0,03, `num_leaves` 15, `min_data_in_leaf` 200, `feature_fraction` 0,5, `bagging_fraction` 0,8, `lambda_l2` 1, hasta 1 500 rondas con paciencia 50, semilla 42 y `deterministic=True`. El modelo recorta el cf a [0, 1]; el orden de cuantiles y el paso a MW los hace el marco. Cada ejecución guarda por pliegue `feature_importance.parquet` (ganancia por cuantil) y `lgbm_early_stopping.parquet` (árboles usados), mediante el gancho opcional `Model.artifacts()`.
+
+Las referencias se volvieron a evaluar con la tabla oro versión 3 y dan las mismas cifras que con la versión 1.
+
+| Modelo | RMSE Q50 (MW) | MAE (MW) | Winkler | Cobertura 80 % | Ancho medio (MW) | Días mejores que el operador |
+|---|---|---|---|---|---|---|
+| Operador | **931,2** | 609,4 | — | — | — | — |
+| Curva de potencia | 1 196,6 | 778,7 | **3 709,4** | **76,9 %** | 2 195,5 | 23,9 % |
+| LightGBM v0.1 | 1 233,1 | 839,6 | 4 184,9 | 64,2 % | 1 991,0 | 21,0 % |
+
+LightGBM funciona de punta a punta pero aún no bate a la curva de potencia (+3 % de RMSE) y su intervalo es demasiado estrecho (cobertura 64 % frente al 80 % objetivo). Sesgo +38,4 MW; error de pico 1 197,9 MW y desfase del pico 3,7 h. Variables con más ganancia en Q50: `ws100_all_ctrl`, `wshub_land_mean`, `wshub_all_mean`, `v3_land_ctrl` y `ws100_land_ctrl`. Los árboles usados varían mucho entre pliegues (Q50 de 43 a 285; Q10 de 77 a 500): con un tramo de parada temprana de pocos días la elección es ruidosa. Son los puntos de partida para Optuna (ADR 0015) y la calibración conformal (ADR 0014).
+
 ## 9. Limitaciones y no verificado
 
 - **Persistencia fuera:** exige conocer hasta qué hora hay generación publicada antes del cierre, que no está medida (F2.5/F2.7). El ADR 0017 la pide; queda pendiente.

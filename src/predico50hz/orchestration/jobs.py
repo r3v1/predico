@@ -51,14 +51,29 @@ class _Tee(io.TextIOBase):
         self.target.flush()
 
 
+def _failure_reason(lines: list[str]) -> str:
+    """Motivo del fallo: los `errors` del resumen JSON o las líneas con "error"; si no, el final."""
+    reasons: list[str] = []
+    for line in lines:
+        try:
+            info = json.loads(line)
+        except ValueError:
+            info = None
+        if isinstance(info, dict) and info.get("errors"):  # pyright: ignore[reportUnknownMemberType]
+            reasons.append(str(info["errors"]))  # pyright: ignore[reportUnknownArgumentType]
+        elif info is None and "error" in line.lower():
+            reasons.append(line)
+    return " | ".join((reasons or lines)[-3:])
+
+
 def _run_cli(main: Callable[[list[str]], int], argv: list[str], label: str) -> None:
     """Ejecuta un CLI en el mismo proceso; un código distinto de 0 es un fallo con su salida."""
-    err = _Tee(sys.stderr)
-    with contextlib.redirect_stderr(err):
+    out, err = _Tee(sys.stdout), _Tee(sys.stderr)
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = main(argv)
     if rc != 0:
-        tail = " | ".join(err.lines[-3:])  # pyright: ignore
-        raise JobError(summarize_error(f"{label} terminó con código {rc}: {tail}"))
+        reason = _failure_reason([*err.lines, *out.lines])  # pyright: ignore
+        raise JobError(summarize_error(f"{label} terminó con código {rc}: {reason}"))
 
 
 # -- nwp-daily -------------------------------------------------------------------------------

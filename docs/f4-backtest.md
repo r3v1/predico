@@ -1,6 +1,6 @@
 # F4 — Marco de backtest y métricas
 
-Cubre F4.1 a F4.3 y las referencias mínimas de F5 (sin persistencia). Código en `src/predico50hz/evaluation/` (marco) y `src/predico50hz/models/` (interfaz y referencias); tests en `tests/unit/test_backtest_*.py` y `tests/leakage/test_backtest_folds.py`; salidas en `data/backtest/` (ignorado por git). Todo el tiempo es UTC salvo que se diga lo contrario.
+Cubre F4.1 a F4.3 y las referencias mínimas de F5 (sin persistencia). Código en `src/predico50hz/evaluation/` (marco) y `src/predico50hz/models/` (interfaz y referencias); tests en `tests/unit/test_backtest_*.py` y `tests/leakage/test_backtest_folds.py` y de extremo a extremo en `tests/integration/` (§10); salidas en `data/backtest/` (ignorado por git). Todo el tiempo es UTC salvo que se diga lo contrario.
 
 ## 1. Cómo ejecutarlo
 
@@ -197,3 +197,19 @@ Pruebas: `tests/unit/test_cqr.py` (cuantil con corrección finita, ajuste y mín
 - El contador del holdout detecta mirar demasiado, no lo impide; las ejecuciones se pueden borrar a mano de `data/backtest/`, pero el registro `holdout_log.jsonl` es de solo añadir.
 - Pliegues de entrenamiento muy cortos al principio (90 días en el primero): el error de diciembre refleja eso.
 - No se ha verificado el capítulo del informe en móvil; sí en escritorio claro con capturas de Chromium (el modo oscuro usa los mismos tokens de color).
+
+## 10. Test de integración extremo a extremo
+
+`tests/integration/` recorre la cadena entera con datos sintéticos y deterministas (semilla fija, todo en `tmp_path`, sin red, sin `data/` ni `/mnt/data`): ingesta → plata → oro → entrenamiento → métricas. Se lanza con `uv run pytest tests/integration -q --durations=5` (marcador `integration`, unos 40 s) y entra en la CI con `pytest -m "not data"`.
+
+| Etapa | Qué se ejecuta de verdad | Qué se fabrica (frontera) |
+|---|---|---|
+| MaStR | `ingest.mastr.pipeline.run`: unidades, zona, k-means, capacidad diaria, plata y `centroids.yaml`, con `capacity_schema`/`units_schema` | ZIP del export con XML UTF-16 (catálogo, unidades, puntos de conexión) |
+| NWP | `read_cube` → `BronzeStore` (Icechunk local) → `build_table`/`write_silver`, con `validate_silver` en una muestra de pasadas | `Source` en memoria por pasada (en lugar de `open_source`, que lee el Icechunk remoto) |
+| ENTSO-E | `EntsoeClient` y `fetch_dataset` → bronce XML gzip → `build_silver` y `validate` (generación y pronóstico del operador; una descarga de julio errónea y otra posterior que la corrige) | `httpx.MockTransport` que contesta XML `GL_MarketDocument` |
+| Oro | `python -m predico50hz.features` (construcción, escritura Delta y esquema Pandera) más `day_issues` y consistencia con las plata | — |
+| Backtest | `run_backtest` con `operator`, `climatology`, `power_curve` y `lgbm` (más un holdout), `validate_predictions`, `summarize`, clasificación y `scorecard` | — |
+
+Los datos salen todos de una misma función de viento (`tests/integration/chain_synth.py`): el NWP la lleva con sesgo por pasada y dispersión de miembros, la generación es capacidad MaStR por una curva cúbica con ruido y el «operador» es esa generación con error. Así LightGBM, que se entrena con pocos días, debe batir a la climatología (se exige RMSE < 0,6 × el de la climatología, y los intervalos y métricas deben ser finitos y completos). Cubre 65 cierres entre el 26-mar y el 31-jul-2026, incluye el día de 92 pasos (cambio de hora del 29-mar) y un día de holdout; usa `--min-train-months 2` para obtener tres pliegues (mayo, junio, julio).
+
+No cubre: la ingesta IFS de ECMWF (`ingest/ifs`), la búsqueda automática de `k` en MaStR (necesita miles de unidades), las plata de precios y capacidad de ENTSO-E (no las consume la oro), la orquestación, el informe ejecutivo ni el sumidero MLflow. Las cifras de error no dicen nada del rendimiento real: solo comprueban que la cadena es coherente de punta a punta.

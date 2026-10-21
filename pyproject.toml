@@ -78,7 +78,10 @@ root = "."
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
-markers = ["data: necesita datos reales de data/ (se excluye en CI con -m 'not data')"]
+markers = [
+    "data: necesita datos reales de data/ (se excluye en CI con -m 'not data')",
+    "integration: cadena entera ingesta → plata → oro → backtest con datos sintéticos (sin red ni data/)",
+]
 
 [tool.coverage.run]
 source = ["predico50hz"]

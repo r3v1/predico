@@ -18,7 +18,9 @@ Un error en las métricas o en las variables cuesta dinero en la liga y es difí
 
 ## Consecuencias
 
-- La CI y hypothesis aún no están: la CI es un issue del milestone `2 · Modelo v0.1`.
+- CI en `.github/workflows/ci.yml` desde el 2026-10-21 (#19): `pytest -m "not data"` excluye los tests que leen `data/`; los anti look-ahead sintéticos sí corren. No instala `torch` ni su cadena CUDA mientras ningún código lo use.
+- Pyright cubre también `tests/`, pero con las reglas `reportUnknown*` y similares desactivadas solo ahí (ruido de polars/pandas en fixtures); `src/` sigue en estricto.
+- hypothesis aún no está.
 
 ## Referencias
 

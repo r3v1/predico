@@ -15,6 +15,7 @@ Para comparar modelos y reproducir un resultado hay que saber exactamente con qu
 ## Consecuencias
 
 - El criterio de reproducibilidad (reentrenar desde cero reproduce las métricas con < 0,5 % de diferencia) depende de este enlace.
+- Se instala `mlflow-skinny`, no `mlflow`: el paquete completo exige `pyarrow<26` y el proyecto fija `pyarrow>=26`. Sin SQLAlchemy, el almacén es de ficheros (`file:data/mlflow`, con `MLFLOW_ALLOW_FILE_STORE=true`) y la UI se abre aparte con `uvx --from mlflow` (`docs/f4-backtest.md` §7). El snapshot de Icechunk se deduce por fecha mientras `run.json` no lo registre.
 - Los milestones de GitHub usan un número de orden, no la versión del modelo, para no mezclar ambas cosas.
 
 ## Referencias

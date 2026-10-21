@@ -92,9 +92,20 @@ Total: 23 324 filas, 243 días. El periodo reservado (`holdout`, desde 2026-08-0
 3. Registrarlo en `predico50hz.models.MODELS`; ya funciona `run --model <name>` y aparece en el informe.
 4. El marco convierte a MW con `y_cap_mw` (capacidad MaStR de la fecha UTC del intervalo; la de producción sería `cap_all_mw`, prácticamente igual), baja Q10 / sube Q90 hasta Q50 si lo cruzan, recorta a [0, capacidad] y valida con Pandera: clave única, malla completa y contigua, sin NaN, Q10 ≤ Q50 ≤ Q90, 0 ≤ q ≤ capacidad.
 
-## 7. MLflow (pendiente)
+## 7. MLflow
 
-No está añadido. El marco guarda cada ejecución como `RunRecord` (`evaluation/store.py`) a través de sumideros con un único método `save(record)`. Un adaptador MLflow son ~10 líneas: `mlflow.start_run(run_name=record.run_id)`, `log_params(record.params)`, `log_metrics(record.flat_metrics)`, `set_tags(record.tags)` (incluye modo y versión de la tabla oro; `run.json` ya trae lockfile y commit) y `log_artifacts(record.directory)`; se pasa en `run_backtest(sinks=[FileRunStore(root), MlflowSink()])`. Hay que añadir `mlflow` a las dependencias y propagar `sinks` desde el CLI.
+`MlflowRunSink` (`evaluation/mlflow_sink.py`) registra cada ejecución como un run de MLflow (`mlflow-skinny` 3.17.2; el paquete completo exige `pyarrow<26`). Un run por `run_id` (etiqueta `predico.run_id`; registrar dos veces no duplica). Guarda parámetros, métricas totales, métricas por pliegue (`fold_rmse`, `fold_mae`… con `step` = nº de pliegue) y como artefactos todo el directorio de la ejecución (predicciones, `run.json`, `metrics.json`, PNG si los hay).
+
+**Almacén.** `file:data/mlflow` (carpeta ignorada por git). Skinny no trae SQLAlchemy, así que `sqlite:` no funciona; el almacén de ficheros está «en mantenimiento» en 3.17 y exige `MLFLOW_ALLOW_FILE_STORE=true`, que el sumidero fija solo.
+
+**Versión de datos** (etiquetas de cada run): `gold_delta_version` (de `run.json`) y `nwp_icechunk_snapshot`: la última instantánea de `main` del Icechunk NWP escrita antes de `created_at` de la ejecución (el bronce solo crece); `unknown` si el repositorio no es accesible. También `git_commit` y `lockfile_sha256`.
+
+```bash
+uv run python -m predico50hz.evaluation run --model operator --mlflow   # registra al ejecutar
+uv run python -m predico50hz.evaluation mlflow-sync                     # registra las ya existentes
+MLFLOW_ALLOW_FILE_STORE=true uvx --from 'mlflow==3.17.2' mlflow ui \
+    --backend-store-uri file:data/mlflow --port 5000                    # UI en http://127.0.0.1:5000
+```
 
 ## 8. Resultados de las referencias (ejecución del 2026-10-16, tabla oro versión Delta 1)
 

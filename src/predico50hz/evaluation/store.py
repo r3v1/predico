@@ -4,11 +4,8 @@
 `RunSink` la interfaz mínima para guardarla. `FileRunStore` escribe `run.json`, `metrics.json` y
 `predictions.parquet` bajo `runs/<run_id>/`.
 
-**Adaptador de MLflow (pendiente, trivial):** una clase con `save(record)` que haga
-`mlflow.start_run(run_name=record.run_id)`, `mlflow.log_params(record.params)`,
-`mlflow.log_metrics(record.flat_metrics)`, `mlflow.set_tags(record.tags)` y
-`mlflow.log_artifacts(str(record.directory))`; se añade a la lista de sumideros de
-`backtest.run_backtest(sinks=[...])` sin tocar nada más. Ver `docs/f4-backtest.md`.
+`evaluation/mlflow_sink.py` aporta `MlflowRunSink` (sumidero opcional hacia MLflow, ver
+`docs/f4-backtest.md` §7); se añade a `backtest.run_backtest(sinks=[...])` o con `run --mlflow`.
 """
 
 import datetime as dt

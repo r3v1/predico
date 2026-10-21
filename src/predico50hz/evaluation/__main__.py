@@ -2,6 +2,7 @@
 
 - `run --model <nombre> [--holdout]`: ejecuta un modelo (validación walk-forward o, de forma
   explícita y registrada, el periodo reservado).
+- `mlflow-sync`: registra en MLflow (`data/mlflow`) las ejecuciones ya guardadas en disco.
 - `compare`: tabla de clasificación de las últimas ejecuciones de cada modelo.
 - `report`: `scorecard.json` y gráficos para negocio en `data/backtest/report/`.
 """
@@ -16,7 +17,14 @@ import polars as pl
 
 from predico50hz.evaluation import folds as fl
 from predico50hz.evaluation.backtest import run_backtest
-from predico50hz.evaluation.store import DEFAULT_ROOT, build_leaderboard, holdout_count
+from predico50hz.evaluation.mlflow_sink import DEFAULT_TRACKING_URI
+from predico50hz.evaluation.store import (
+    DEFAULT_ROOT,
+    FileRunStore,
+    RunSink,
+    build_leaderboard,
+    holdout_count,
+)
 from predico50hz.features.config import DEFAULT_GOLD
 from predico50hz.models import MODELS
 from predico50hz.models.baselines import DEFAULT_OPERATOR
@@ -41,8 +49,14 @@ def _cmd_run(a: argparse.Namespace) -> int:
             f"con {a.model!r} ({holdout_count(a.root)} en total). Cada mirada lo desgasta.",
             file=sys.stderr,
         )
+    sinks: list[RunSink] | None = None
+    if a.mlflow:
+        from predico50hz.evaluation.mlflow_sink import MlflowRunSink  # noqa: PLC0415
+
+        sinks = [FileRunStore(a.root), MlflowRunSink(a.mlflow_uri)]
     rec = run_backtest(
         a.model,
+        sinks=sinks,
         holdout=a.holdout,
         gold=a.gold,
         root=a.root,
@@ -88,16 +102,27 @@ def _cmd_report(a: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_mlflow_sync(a: argparse.Namespace) -> int:
+    from predico50hz.evaluation.mlflow_sink import MlflowRunSink, sync  # noqa: PLC0415
+
+    new, old = sync(a.root, MlflowRunSink(a.mlflow_uri))
+    print(f"MLflow ({a.mlflow_uri}): {new} ejecuciones registradas, {old} ya existían")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("run", "compare", "report"):
+    for name in ("run", "compare", "report", "mlflow-sync"):
         p = sub.add_parser(name)
         p.add_argument("--root", default=DEFAULT_ROOT, help="carpeta de salida (data/backtest)")
+        if name in {"run", "mlflow-sync"}:
+            p.add_argument("--mlflow-uri", default=DEFAULT_TRACKING_URI, help="tracking URI")
         if name in {"run", "report"}:
             p.add_argument("--gold", default=DEFAULT_GOLD)
         if name == "run":
             p.add_argument("--model", required=True, choices=sorted(MODELS))
+            p.add_argument("--mlflow", action="store_true", help="registrar también en MLflow")
             p.add_argument("--holdout", action="store_true", help="evaluar el periodo reservado")
             p.add_argument("--operator", default=DEFAULT_OPERATOR)
             p.add_argument("--min-train-months", type=int, default=fl.DEFAULT_MIN_TRAIN_MONTHS)
@@ -108,7 +133,12 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     if a.cmd == "report" and a.out is None:
         a.out = str(Path(a.root) / "report")
-    return {"run": _cmd_run, "compare": _cmd_compare, "report": _cmd_report}[a.cmd](a)
+    return {
+        "run": _cmd_run,
+        "compare": _cmd_compare,
+        "report": _cmd_report,
+        "mlflow-sync": _cmd_mlflow_sync,
+    }[a.cmd](a)
 
 
 if __name__ == "__main__":

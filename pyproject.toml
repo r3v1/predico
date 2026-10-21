@@ -46,15 +46,39 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "SIM", "PL", "NPY", "PD", "PT", "RUF"]
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "tests"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
 
+# En tests se relaja la inferencia estricta (fixtures, polars/pandas sin tipos completos).
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["src"]
+reportUnknownArgumentType = false
+reportUnknownLambdaType = false
+reportUnknownMemberType = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
+reportMissingParameterType = false
+reportMissingTypeArgument = false
+reportPrivateUsage = false
+reportArgumentType = false
+reportOperatorIssue = false
+reportOptionalMemberAccess = false
+reportOptionalOperand = false
+reportOptionalSubscript = false
+reportUnusedImport = false
+reportMissingTypeStubs = false
+
+[[tool.pyright.executionEnvironments]]
+root = "."
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
+markers = ["data: necesita datos reales de data/ (se excluye en CI con -m 'not data')"]
 
 [tool.coverage.run]
 source = ["predico50hz"]

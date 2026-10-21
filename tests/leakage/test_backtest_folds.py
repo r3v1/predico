@@ -80,6 +80,7 @@ def test_min_train_months_respected() -> None:
         assert months == m
 
 
+@pytest.mark.data
 def test_real_table_folds_cover_validation_and_train_months() -> None:
     if not (GOLD / "_delta_log").is_dir():
         pytest.skip("sin tabla oro")

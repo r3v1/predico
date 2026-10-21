@@ -77,6 +77,7 @@ def test_leakage_check_detects_a_violation(synth: Synth, registry: list[Column])
     )
 
 
+@pytest.mark.data
 def test_real_gold_has_no_lookahead() -> None:
     path = REPO / DEFAULT_GOLD
     if not (path / "_delta_log").exists():

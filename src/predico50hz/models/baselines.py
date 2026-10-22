@@ -5,20 +5,27 @@
 - `operator`: pronóstico day-ahead del operador (ENTSO-E B18 + B19) como referencia externa:
   solo Q50, en MW. Es SOLO benchmark; nunca entra en `predico50hz.features`.
 
-**Persistencia: fuera, a propósito.** Exige saber hasta qué hora hay generación publicada antes
-del cierre (15:00 de Berlín) y esa hora de publicación no está medida (F2.5/F2.7). Sin ella,
-«lo de ayer» no se puede construir sin mirar al futuro o sin inventar un retraso.
+- `persistence`: repite lo último conocido de la generación real (ENTSO-E B18 + B19, en MW) en
+  el cierre. Solo usa cuartos de hora que empiezan como muy tarde en `cierre - lag_min`
+  (180 min por defecto: retraso normal de 30 a 62 min en octubre de 2026 y atasco de ENTSO-E
+  del 22 oct de hasta 166 min, issue #11). Intervalo Q10/Q90 con los cuantiles empíricos del
+  error por horizonte.
 """
 
+import datetime as dt
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import numpy as np
 import polars as pl
 
+from predico50hz.features.timing import closure_utc
 from predico50hz.models.base import Array, Model, Prediction, Unit
 
 DEFAULT_OPERATOR = "data/silver/entsoe/forecast"
+DEFAULT_GENERATION = "data/silver/entsoe/generation"
+STEP_S = 900  # malla de 15 min
+STEPS_PER_DAY = 96
 OPERATOR_PSR = ("B18", "B19")  # eólica marina y terrestre
 Q_LO, Q_HI = 0.1, 0.9
 MONTHS = 12
@@ -177,3 +184,137 @@ class Operator(Model):
             self._op = load_operator_mw(self.source)
         joined = df.select("ts_utc").join(self._op, on="ts_utc", how="left", maintain_order="left")
         return Prediction(q50=joined["op_mw"].to_numpy().astype(np.float64))
+
+
+def load_generation_mw(path: str | Path = DEFAULT_GENERATION) -> tuple[int, Array]:
+    """Generación real B18 + B19 en MW sobre la malla de 15 min: (primer paso, valores).
+
+    El paso es `ts_utc` en segundos de época // 900. Los huecos y los puntos con
+    `is_gap_filled` quedan como NaN: el relleno interpola con valores posteriores al hueco y,
+    cerca del corte, podría usar datos que aún no existían.
+    """
+    g = pl.read_delta(str(path)).select("ts_utc", "wind_mw", "is_gap_filled")
+    g = g.filter(pl.col("wind_mw").is_not_null() & ~pl.col("is_gap_filled").fill_null(False))
+    steps = g["ts_utc"].dt.epoch("s").to_numpy().astype(np.int64) // STEP_S
+    vals = g["wind_mw"].to_numpy().astype(np.float64)
+    first = int(steps.min())
+    out = np.full(int(steps.max()) - first + 1, np.nan)
+    out[steps - first] = vals
+    return first, out
+
+
+class Persistence(Model):
+    """Repite lo último conocido de la generación real en el cierre, con margen de publicación.
+
+    Para el cierre D el corte es `closure_utc(D) - lag_min` (hora de Berlín, con horario de
+    verano e invierno): solo cuentan los cuartos de hora que empiezan en el corte o antes.
+    - `mode="last"` (por defecto, el de menor RMSE en el backtest): el último valor conocido,
+      plano para todo el día objetivo.
+    - `mode="profile"`: cada cuarto objetivo repite el mismo cuarto del día conocido más
+      reciente (`ts - 24 h·k`, k mínimo con ese instante ≤ corte; es decir, las últimas 24 h
+      conocidas alineadas por hora UTC). Si ese punto falta, cae al último valor.
+    Si no hay ningún valor en las `max_stale_min` anteriores al corte, la fila sale NaN y la
+    validación del marco la rechaza (en la tabla real no ocurre).
+
+    Unidad MW (el marco quita `y_cap_mw` antes de `predict`). Q50 = la persistencia pura; Q10 y
+    Q90 = Q50 + cuantiles empíricos del error de entrenamiento por tramo de horizonte (horas
+    desde el corte, `horizon_edges_h`); un tramo con menos de `min_count` filas usa todos. Sin
+    `fit` solo se devuelve Q50.
+    """
+
+    name: ClassVar[str] = "persistence"
+    is_reference: ClassVar[bool] = True
+    label: ClassVar[str] = "Repetir lo último conocido"
+    unit: ClassVar[Unit] = "mw"
+
+    def __init__(  # noqa: PLR0913
+        self,
+        *,
+        lag_min: int = 180,
+        mode: Literal["profile", "last"] = "last",
+        max_stale_min: int = 360,
+        horizon_edges_h: tuple[float, ...] = (12.0, 18.0, 24.0, 30.0),
+        min_count: int = 200,
+        source: str | Path = DEFAULT_GENERATION,
+    ) -> None:
+        if mode not in ("profile", "last"):
+            raise ValueError(f"modo desconocido {mode!r}")
+        self.lag_min = lag_min
+        self.mode = mode
+        self.max_stale_min = max_stale_min
+        self.horizon_edges_h = tuple(float(e) for e in horizon_edges_h)
+        self.min_count = min_count
+        self.source = str(source)
+        self._series: tuple[int, Array] | None = None
+        self._err: np.ndarray | None = None  # (tramos, 2): cuantiles Q10 y Q90 del error
+        self._err_all = np.zeros(2)
+
+    def params(self) -> dict[str, Any]:
+        return {
+            "lag_min": self.lag_min,
+            "mode": self.mode,
+            "max_stale_min": self.max_stale_min,
+            "horizon_edges_h": list(self.horizon_edges_h),
+            "min_count": self.min_count,
+            "source": self.source,
+            "gap_filled": "excluido",
+        }
+
+    def _gen(self) -> tuple[int, Array]:
+        if self._series is None:
+            self._series = load_generation_mw(self.source)
+        return self._series
+
+    def _cutoff_step(self, issue: pl.Series) -> np.ndarray:
+        cut = {
+            d: int((closure_utc(d) - dt.timedelta(minutes=self.lag_min)).timestamp() // STEP_S)
+            for d in issue.unique().to_list()
+        }
+        return np.array([cut[d] for d in issue.to_list()], dtype=np.int64)
+
+    def _persist(self, df: pl.DataFrame) -> tuple[Array, Array]:
+        """(persistencia en MW, horas desde el corte) por fila; NaN si no hay dato utilizable."""
+        first, vals = self._gen()
+        n = len(vals)
+        c = self._cutoff_step(df["forecast_issue_date"])
+        t = df["ts_utc"].dt.epoch("s").to_numpy().astype(np.int64) // STEP_S
+        valid = ~np.isnan(vals)
+        last_idx = np.where(valid, np.arange(n), -1)
+        last_idx = np.maximum.accumulate(last_idx)
+        pos = np.clip(c - first, -1, n - 1)
+        li = np.where(pos >= 0, last_idx[np.maximum(pos, 0)], -1)
+        fresh = (li >= 0) & ((c - first - li) * STEP_S <= self.max_stale_min * 60)
+        last = np.where(fresh, vals[np.maximum(li, 0)], np.nan)
+        if self.mode == "last":
+            out = last
+        else:
+            k = np.maximum(-(-(t - c) // STEPS_PER_DAY), 1)  # ceil((t - c) / 96)
+            src = t - k * STEPS_PER_DAY - first
+            ok = (src >= 0) & (src < n)
+            prof = np.where(ok, vals[np.clip(src, 0, n - 1)], np.nan)
+            out = np.where(np.isnan(prof), last, prof)
+        return out, np.asarray((t - c) * (STEP_S / 3600), dtype=np.float64)
+
+    def fit(self, train: pl.DataFrame) -> None:
+        t = train.drop_nulls("y_gen_mw")
+        pers, hours = self._persist(t)
+        err = t["y_gen_mw"].to_numpy().astype(np.float64) - pers
+        ok = ~np.isnan(err)
+        err, hours = err[ok], hours[ok]
+        if err.size == 0:
+            raise ValueError("sin filas de entrenamiento con persistencia calculable")
+        self._err_all = np.quantile(err, [Q_LO, Q_HI])
+        bins = np.digitize(hours, self.horizon_edges_h)
+        table = np.tile(self._err_all, (len(self.horizon_edges_h) + 1, 1))
+        for b in range(len(table)):
+            m = bins == b
+            if int(m.sum()) >= self.min_count:
+                table[b] = np.quantile(err[m], [Q_LO, Q_HI])
+        self._err = table
+
+    def predict(self, df: pl.DataFrame) -> Prediction:
+        pers, hours = self._persist(df)
+        if self._err is None:
+            return Prediction(q50=pers)
+        e = self._err[np.digitize(hours, self.horizon_edges_h)]
+        return Prediction(q50=pers, q10=pers + e[:, 0], q90=pers + e[:, 1])

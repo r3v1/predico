@@ -1,13 +1,14 @@
 """Modelos del proyecto. `MODELS` es el registro que usa el CLI de backtest (`--model`)."""
 
 from predico50hz.models.base import Model, Prediction
-from predico50hz.models.baselines import Climatology, Operator, PowerCurve
+from predico50hz.models.baselines import Climatology, Operator, Persistence, PowerCurve
 from predico50hz.models.lgbm import LightGBM, LightGBMCQR
 
 MODELS: dict[str, type[Model]] = {
     Climatology.name: Climatology,
     PowerCurve.name: PowerCurve,
     Operator.name: Operator,
+    Persistence.name: Persistence,
     LightGBM.name: LightGBM,
     LightGBMCQR.name: LightGBMCQR,
 }
@@ -19,6 +20,7 @@ __all__ = [
     "LightGBMCQR",
     "Model",
     "Operator",
+    "Persistence",
     "PowerCurve",
     "Prediction",
 ]

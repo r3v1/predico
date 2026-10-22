@@ -217,8 +217,13 @@ def test_gold_table(chain: Chain) -> None:
 def runs(chain: Chain) -> dict[str, RunRecord]:
     op = chain.silver / "entsoe" / "forecast"
     out: dict[str, RunRecord] = {}
-    for name in ("operator", "climatology", "power_curve", "lgbm", "lgbm_cqr"):
-        params = {"lgbm": LGBM_PARAMS, "lgbm_cqr": {**LGBM_PARAMS, "cqr_min_days": 3}}.get(name)
+    gen = chain.silver / "entsoe" / "generation"
+    for name in ("operator", "climatology", "power_curve", "persistence", "lgbm", "lgbm_cqr"):
+        params = {
+            "lgbm": LGBM_PARAMS,
+            "lgbm_cqr": {**LGBM_PARAMS, "cqr_min_days": 3},
+            "persistence": {"source": str(gen)},
+        }.get(name)
         out[name] = run_backtest(
             name,
             gold=chain.gold,
@@ -254,7 +259,7 @@ def test_backtest_folds_and_valid_predictions(chain: Chain, runs: dict[str, RunR
     n_train = [f["n_train_rows"] for f in rec.run["folds"]]
     assert n_train == sorted(n_train)  # ventana creciente
     assert rec.run["gold"]["delta_version"] == DeltaTable(str(chain.gold)).version()
-    for name in ("operator", "climatology", "power_curve", "lgbm", "lgbm_cqr"):
+    for name in ("operator", "climatology", "power_curve", "persistence", "lgbm", "lgbm_cqr"):
         preds = runs[name].predictions
         validate_predictions(preds, expected)  # esquema Pandera + malla completa
         assert preds.height == expected.height
@@ -275,7 +280,7 @@ def test_backtest_folds_and_valid_predictions(chain: Chain, runs: dict[str, RunR
 
 
 def test_backtest_metrics_are_complete_and_reasonable(runs: dict[str, RunRecord]) -> None:
-    for name in ("operator", "climatology", "power_curve", "lgbm", "lgbm_holdout"):
+    for name in ("operator", "climatology", "power_curve", "persistence", "lgbm", "lgbm_holdout"):
         met = runs[name].metrics
         assert set(met) == {"total", "by_fold", "by_month"}
         assert set(met["total"]) == METRIC_KEYS
@@ -289,11 +294,16 @@ def test_backtest_metrics_are_complete_and_reasonable(runs: dict[str, RunRecord]
     ]  # fmt: skip
     # El operador no da intervalo: sus métricas de intervalo son nulas, nunca inventadas.
     assert runs["operator"].metrics["total"]["coverage"] is None
-    for name in ("climatology", "power_curve", "lgbm"):
+    for name in ("climatology", "power_curve", "persistence", "lgbm"):
         cov = runs[name].metrics["total"]["coverage"]
         assert 0.2 < cov < 1.0, (name, cov)
 
-    rmse = {n: runs[n].metrics["total"]["rmse"] for n in ("climatology", "power_curve", "lgbm")}
+    rmse = {
+        n: runs[n].metrics["total"]["rmse"]
+        for n in ("climatology", "power_curve", "persistence", "lgbm")
+    }
+    # La persistencia no ve el NWP: con una señal clara, LightGBM la supera.
+    assert rmse["lgbm"] < rmse["persistence"], rmse
     # Con una señal viento → generación clara, los modelos que ven el NWP ganan de largo a la
     # climatología (que solo conoce la hora y el mes), y LightGBM no puede quedarse a medias.
     assert rmse["lgbm"] < 0.6 * rmse["climatology"], rmse

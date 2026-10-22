@@ -2,6 +2,14 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.10"
+    date: 2026-10-22
+    title: Nueva referencia, «repetir lo último conocido», sin hacer trampa
+    items:
+      - "Ya sabemos con cuánto retraso publica el operador la producción real: lo normal es una media hora. El 22 de octubre se atascó justo alrededor del cierre y llegó a casi tres horas."
+      - "Con eso se ha montado la referencia más sencilla: repetir para mañana la última producción que ya estaba publicada tres horas antes del cierre. El margen cubre un atasco como el del 22 de octubre y apenas empeora el resultado."
+      - "Como se esperaba, repetir lo último conocido sirve de poco para el día siguiente: se equivoca casi cuatro veces más que el operador, en la línea de la media histórica."
+      - "Con esta, ya están las cuatro referencias del plan: operador, media histórica, curva de potencia y «repetir lo último conocido». El siguiente paso es la prueba del primer modelo frente a las cuatro."
   - version: "0.9"
     date: 2026-10-22
     title: El servidor sigue encendido y se guarda copia de todo lo que archiva

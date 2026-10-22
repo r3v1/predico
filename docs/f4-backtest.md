@@ -1,6 +1,6 @@
 # F4 — Marco de backtest y métricas
 
-Cubre F4.1 a F4.3 y las referencias mínimas de F5 (sin persistencia). Código en `src/predico50hz/evaluation/` (marco) y `src/predico50hz/models/` (interfaz y referencias); tests en `tests/unit/test_backtest_*.py` y `tests/leakage/test_backtest_folds.py` y de extremo a extremo en `tests/integration/` (§10); salidas en `data/backtest/` (ignorado por git). Todo el tiempo es UTC salvo que se diga lo contrario.
+Cubre F4.1 a F4.3 y las referencias mínimas de F5 (climatología, curva de potencia, operador y persistencia). Código en `src/predico50hz/evaluation/` (marco) y `src/predico50hz/models/` (interfaz y referencias); tests en `tests/unit/test_backtest_*.py` y `tests/leakage/test_backtest_folds.py` y de extremo a extremo en `tests/integration/` (§10); salidas en `data/backtest/` (ignorado por git). Todo el tiempo es UTC salvo que se diga lo contrario.
 
 ## 1. Cómo ejecutarlo
 
@@ -8,6 +8,7 @@ Cubre F4.1 a F4.3 y las referencias mínimas de F5 (sin persistencia). Código e
 uv run python -m predico50hz.evaluation run --model climatology        # validación walk-forward
 uv run python -m predico50hz.evaluation run --model power_curve
 uv run python -m predico50hz.evaluation run --model operator
+uv run python -m predico50hz.evaluation run --model persistence       # repetir lo último conocido (§8.3)
 uv run python -m predico50hz.evaluation run --model lgbm_cqr           # LightGBM + calibración conformal (§8.2)
 uv run python -m predico50hz.evaluation run --model power_curve --holdout   # periodo reservado (queda registrado)
 uv run python -m predico50hz.evaluation compare                         # clasificación de las últimas ejecuciones
@@ -26,7 +27,7 @@ Opciones de `run`: `--min-train-months N` (3 por defecto), `--param clave=valor`
 | `evaluation/store.py` | `RunRecord`, `FileRunStore`, registro del holdout y `leaderboard` |
 | `evaluation/scorecard.py`, `plots.py`, `report.py` | Cuadro de mando y gráficos para negocio |
 | `models/base.py` | Interfaz `Model` / `Prediction` |
-| `models/baselines.py` | `climatology`, `power_curve`, `operator` |
+| `models/baselines.py` | `climatology`, `power_curve`, `operator`, `persistence` |
 | `models/cqr.py` | Calibración conformal (CQR) de Q10 y Q90; la usa `lgbm_cqr` (§8.2) |
 | `report/backtest.py` | Capítulo del informe ejecutivo |
 
@@ -118,6 +119,7 @@ Validación walk-forward (dic 2025 – jul 2026, 23 324 filas, 243 días):
 | Operador (ENTSO-E B18+B19) | **931,2** | — | — | — | — | — |
 | Curva de potencia (`wshub_all_mean`, tramos de 0,5 m/s) | 1 196,6 | −28,5 % | 3 709,4 | 76,9 % | 2 195,5 | 23,9 % |
 | Climatología (hora local × mes) | 3 406,4 | −265,8 % | 11 766,4 | 73,0 % | 7 928,7 | 3 % |
+| Persistencia (último valor conocido, margen de 180 min; §8.3) | 3 746,1 | −302,3 % | 11 714,3 | 81,8 % | 8 297,7 | 4 % |
 
 Periodo reservado (2026-08-01 → 10-16, 7 354 filas, 76 días; una evaluación por referencia):
 
@@ -186,9 +188,23 @@ Por mes (el pliegue 0 es diciembre; la cobertura mensual es una condición sobre
 
 Pruebas: `tests/unit/test_cqr.py` (cuantil con corrección finita, ajuste y mínimo de días con casos a mano, orden y límites, integración en el marco) y `tests/leakage/test_cqr_leakage.py` (alterar la realidad del día objetivo o posterior no cambia el ajuste; de extremo a extremo con el backtest sintético).
 
+### 8.3 Persistencia: repetir lo último conocido (ejecución del 2026-10-22, tabla oro versión Delta 3)
+
+Validación walk-forward, las mismas 23 324 filas y 243 días, margen de 180 min y modo `last`: RMSE 3 746,1 MW (operador 931,2; −302,3 %), Winkler 11 714,3, cobertura 81,8 %, ancho medio 8 297,7 MW, mejor que el operador en el 4 % de los días (ejecución `20261022T184205Z-persistence-validation`). No cumple G1 (el rango sí está en banda, el error no). No se ha evaluado en el periodo reservado: no hace falta para una referencia que no se optimiza.
+
+- **Corte.** Para el cierre D, `closure_utc(D) - lag_min` (15:00 de Berlín menos el margen: 10:00 UTC en verano y 11:00 UTC en invierno con 180 min). Solo se usan cuartos de hora cuyo `ts_utc` es ≤ al corte; el que empieza justo en el corte entra y el siguiente no. El corte se calcula con `closure_utc` de la fecha D, así que respeta el cambio de hora.
+- **Margen de 180 min** (`lag_min`, registrado en `params()`). Sale de las mediciones del issue #11. Del 16 al 22 de octubre de 2026 (unas 40 observaciones) el retraso entre la hora de la consulta y el inicio del último cuarto de hora publicado fue normalmente de 30 a 62 min (peor caso, 62 min a las 13:17 UTC). Pero el 22 de octubre hubo un atasco de ENTSO-E alrededor del cierre: a las 13:01 UTC el último cuarto publicado era el de las 11:45 (76 min), a las 14:39 el de las 12:00 (160 min) y a las 15:01 el de las 12:15 (166 min). Con 90 min habría sobrado solo 15 min en el cierre de ese día; 180 min cubren un atasco de unas 2 h 45 min.
+- **Coste del margen.** Con `lag_min=90` (ejecución de comparación `20261022T184200Z-persistence-validation`) el RMSE es 3 669,7 MW, Winkler 11 475,3 y cobertura 82,4 %; con 180 min sube a 3 746,1 MW (+2,1 %). Es poco porque el día objetivo está tan lejos del corte que 90 min más de antigüedad casi no cambian la referencia.
+- **Modo.** Se evaluaron los dos con el margen de 90 min: `last` (último valor conocido, plano todo el día objetivo) RMSE 3 669,7 MW, `profile` (mismo cuarto de hora del día conocido más reciente, últimas 24 h alineadas por hora UTC) RMSE 3 983,5 MW, `20261022T183851Z-persistence-validation`. Por defecto `mode="last"`, el de menor RMSE. El día objetivo está entre 10,5 y 34,5 h (más con el margen) después del corte, así que el perfil de ayer no tiene más información que el último valor y, además, el viento cambia de un día a otro; se alinea por UTC (un desplazamiento fijo de 24 h; los dos días al año del cambio de hora el perfil se desplaza 1 h).
+- **Unidad: MW.** El marco quita todas las columnas `y_*` antes de `predict`, incluida `y_cap_mw`, así que el modelo no puede pasar a factor de capacidad; el marco solo recorta a [0, capacidad].
+- **Intervalo.** `fit(train)` calcula la persistencia sobre los cierres de entrenamiento y toma los cuantiles Q10 y Q90 del error (real − persistencia) por tramo de horas desde el corte (`horizon_edges_h` = 12, 18, 24 y 30 h: cinco tramos). Un tramo con menos de `min_count` = 200 filas usa los cuantiles de todo el entrenamiento. Q10 = Q50 + cuantil del error, y análogo para Q90. El Q50 es la persistencia pura, sin corregir el sesgo (−956 MW en validación): es una referencia, no un modelo, y corregirlo la convertiría en uno. Sin `fit` solo da Q50.
+- **Huecos.** Se excluyen los puntos con `is_gap_filled` y los nulos: el relleno interpola con valores posteriores al hueco y cerca del corte podría usar datos que aún no existían. Si el valor `last` más reciente tiene más de `max_stale_min` = 360 min antes del corte, la fila sale NaN y la validación del marco la rechaza, igual que con el operador; en la tabla real no ocurre (la serie de plata no tiene puntos rellenados ni huecos en los cierres evaluados). En `profile`, si falta el punto alineado se usa el último valor.
+
+Pruebas: `tests/unit/test_models_persistence.py` (corte inclusivo con horario de verano e invierno, alterar la generación posterior al corte no cambia ninguna predicción ni cuantil, modos con serie sintética conocida, exclusión de puntos rellenados y obsolescencia, cuantiles ordenados).
+
 ## 9. Limitaciones y no verificado
 
-- **Persistencia fuera:** exige conocer hasta qué hora hay generación publicada antes del cierre, que no está medida (F2.5/F2.7). El ADR 0017 la pide; queda pendiente.
+- **Persistencia:** el margen de 180 min sale de una sola semana de medidas de octubre de 2026 (~40 observaciones: retraso normal de 30 a 62 min y un atasco de hasta 166 min el 22 de octubre); en otras épocas o con incidencias más largas de ENTSO-E podría ser mayor. Además, la generación histórica de la plata es la **última revisión**, no la que estaba publicada en el momento del cierre, así que el valor «último conocido» puede ser algo mejor que el real. Con el mismo cuidado hay que leer su RMSE.
 - **Operador:** solo hay su valor central (sin Winkler ni cobertura) y la serie de `silver` es la **última revisión** descargada (2026-10-16), no necesariamente la que había publicada el día antes: puede ser algo mejor que la real. Su hora de publicación sigue sin medirse.
 - **Holdout de verano-otoño con poco viento** (`y_cf` medio 0,181 frente a 0,203 en train): no garantiza diciembre. La validación solo tiene un invierno, y ya forma parte del entrenamiento a partir de febrero: con 13 meses los modelos no han visto nunca el mismo mes natural previo (por eso la climatología usa los meses vecinos ±1 y, si no hay, todo el entrenamiento).
 - **Cobertura en meses sueltos** oscila entre 69 y 83 %: con ~2 900 filas por mes y autocorrelación fuerte, la banda 76–84 % del total es una condición sobre 8 meses, no una garantía por mes. La CQR (§8.2) lleva el total al 79,8 %, pero por mes sigue entre 63 y 91 %.

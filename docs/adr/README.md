@@ -35,6 +35,7 @@ Las tareas pendientes están en los [issues](https://github.com/r3v1/predico/iss
 | [0027](0027-sin-frontend-propio-en-fase-1.md) | Sin frontend propio en la Fase 1; stack de frontend para cuando toque | aceptada |
 | [0028](0028-calidad-de-codigo-y-ci.md) | Calidad de código, hooks de pre-commit e integración continua | aceptada |
 | [0029](0029-experimentos-y-versionado-del-modelo.md) | Trazabilidad de experimentos y versionado semántico del modelo | aceptada |
+| [0030](0030-persistencia-con-margen-de-publicacion.md) | Persistencia con un margen de publicación de 180 min | aceptada |
 
 ## Plantilla
 

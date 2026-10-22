@@ -1,0 +1,19 @@
+[Unit]
+Description=Predico 50Hertz: copia de los datos de la VM hetzner-g0 (issue #6)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=2h
+StartLimitBurst=4
+OnFailure=predico-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+EnvironmentFile=-%h/.config/predico/ops.env
+# Sin ExecStartPre de espera de red: el host es un alias SSH (no está en network.HOSTS);
+# el ConnectTimeout del script y los reintentos de abajo hacen de espera.
+ExecStart=@REPO@/deploy/hetzner/pull-data.sh --with-nwp
+TimeoutStartSec=1h
+Restart=on-failure
+RestartSec=10min
+Nice=10

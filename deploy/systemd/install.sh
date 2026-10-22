@@ -6,8 +6,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 DEST="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-TIMERS=(predico-nwp-daily.timer predico-entsoe-daily.timer predico-entsoe-hourly.timer)
-UNITS=(predico-nwp-daily.service predico-entsoe-daily.service predico-entsoe-hourly.service
+TIMERS=(predico-nwp-daily.timer predico-entsoe-daily.timer predico-entsoe-hourly.timer
+        predico-vm-pull.timer)
+UNITS=(predico-nwp-daily.service predico-entsoe-daily.service predico-entsoe-hourly.service predico-vm-pull.service
        predico-failure@.service "${TIMERS[@]}")
 
 if [[ "${1:-}" == "--uninstall" ]]; then

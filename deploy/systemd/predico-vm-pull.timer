@@ -1,0 +1,12 @@
+[Unit]
+Description=Predico 50Hertz: copia de la VM, 10:30 UTC
+
+[Timer]
+# UTC explícito: no cambia con el horario de verano de Berlín. Tras nwp-daily (~08:20) y entsoe-daily (06:00)
+OnCalendar=*-*-* 10:30:00 UTC
+Persistent=true
+AccuracySec=1s
+Unit=predico-vm-pull.service
+
+[Install]
+WantedBy=timers.target

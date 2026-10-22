@@ -2,6 +2,14 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.8"
+    date: 2026-10-22
+    title: Primera puerta superada, una semana de descarga diaria sin fallos
+    items:
+      - "Del 16 al 22 de octubre el servidor descargó cada día, sin ayuda, la previsión meteorológica y los datos del operador. Siete de siete días sin fallos: la primera puerta del calendario (G0) queda superada."
+      - "La previsión llegó todos los días a la misma hora (entre las 10:15 y las 10:18, hora de Madrid) y siempre con unas 4 h 40 min de margen antes del cierre de la liga."
+      - "Las consultas horarias al operador fallaron 4 veces en la semana por un error suyo; en todos los casos se recuperaron solas a la hora siguiente."
+      - "La prueba (registro de ejecuciones, horas de llegada e informes de calidad) está guardada fuera del servidor."
   - version: "0.7"
     date: 2026-10-21
     title: El rango ya acierta lo que promete y el archivo meteorológico está completo

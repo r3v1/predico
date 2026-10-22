@@ -39,8 +39,8 @@ insights:
     what: "El tramo reservado para evaluar al modelo (agosto a octubre de 2026) es verano y otoño, con poco viento; la liga empieza en diciembre, el mes de más viento."
     meaning: "Un buen resultado en ese tramo no garantiza buen comportamiento en un temporal invernal."
     action: "Entrenamos con 13 meses (incluido el invierno anterior) y, antes del 12 de noviembre, ampliamos el histórico hasta abril de 2024."
-  - title: La descarga diaria automática aún no está en marcha
-    level: risk
-    what: "El histórico de la previsión está descargado hasta el 15 de octubre de 2026, pero la descarga diaria programada y el registro de la hora real de cada publicación están pendientes."
-    meaning: "Sin ella, cada día nuevo habría que cargarlo a mano."
-    action: "Es el requisito de la primera puerta (G0): siete días seguidos sin fallos."
+  - title: La descarga diaria funciona sola desde hace una semana
+    level: ok
+    what: "Del 16 al 22 de octubre, el servidor descargó cada día la previsión meteorológica y los datos del operador sin ningún fallo y sin que nadie lo tocara. La previsión llegó siempre entre las 10:15 y las 10:18 (hora de Madrid), con unas 4 h 40 min de margen antes del cierre de la liga."
+    meaning: "Superada la primera puerta (G0): cada día nuevo entra solo, revisado y listo para el modelo."
+    action: "Guardamos la prueba fuera del servidor. Falta el plan B si la fuente principal se retrasa, que hoy solo se mide."

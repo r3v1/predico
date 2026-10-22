@@ -17,7 +17,8 @@ from predico50hz.ingest.entsoe.redact import redact, register_secret
 
 API_URL = "https://web-api.tp.entsoe.eu/api"
 MIN_INTERVAL_S = 0.2  # 300 peticiones/min, por debajo del límite de ~400/min
-RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+# 599: timeout de la pasarela de ENTSO-E («uu-gateway-router/connectTimeout», 22 oct 2026)
+RETRY_STATUS = frozenset({429, 500, 502, 503, 504, 599})
 _NO_DATA_RE = re.compile(rb"No matching data found", re.IGNORECASE)
 MAX_RETRIES_400 = (
     2  # ENTSO-E devuelve 400 transitorios (Acknowledgement) con la misma petición válida

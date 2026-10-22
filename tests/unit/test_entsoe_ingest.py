@@ -414,6 +414,20 @@ def test_client_retries_transient_400_then_succeeds() -> None:
     assert n["i"] == 3
 
 
+def test_client_retries_gateway_timeout_599() -> None:
+    n = {"i": 0}
+    body = '{"uuAppErrorMap":{"uu-gateway-router/connectTimeout":{"type":"error"}}}'
+
+    def flaky(req: httpx.Request) -> httpx.Response:
+        n["i"] += 1
+        if n["i"] == 1:
+            return httpx.Response(599, text=body)
+        return httpx.Response(200, content=b"<ok/>")
+
+    assert _client(flaky).fetch({}, *_span()) == b"<ok/>"
+    assert n["i"] == 2
+
+
 def test_client_gives_up_on_persistent_400() -> None:
     n = {"i": 0}
 

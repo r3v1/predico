@@ -2,6 +2,13 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.11"
+    date: 2026-10-22
+    title: Un día visto por cada modelo
+    items:
+      - "Nuevo gráfico en «¿Mejora el pronóstico?»: elija un mes y un tipo de día (con mucho viento, típico o tranquilo) y verá lo que se produjo de verdad junto a lo que habría dicho cada modelo con los datos que tenía al cierre."
+      - "Se ve de un vistazo cómo piensa cada uno: «repetir lo último» es una línea plana desde el último dato publicado, la media histórica es lo normal para esa hora y mes, y los que leen el viento siguen sus subidas y bajadas."
+      - "Debajo, cuánto se equivocó cada modelo ese día, de mejor a peor. Cada modelo nuevo que probemos aparecerá aquí para compararlo con los anteriores."
   - version: "0.10"
     date: 2026-10-22
     title: Nueva referencia, «repetir lo último conocido», sin hacer trampa

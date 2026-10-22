@@ -8,6 +8,7 @@ un estado vacío.
 
 from typing import Any
 
+from predico50hz.report import compare
 from predico50hz.report.paths import Paths
 from predico50hz.report.util import read_json
 
@@ -32,6 +33,14 @@ VALIDATION_KEYS = (
 
 def _pick(d: dict[str, Any] | None, keys: tuple[str, ...]) -> dict[str, Any] | None:
     return {k: d.get(k) for k in keys} if d else None
+
+
+def _compare(paths: Paths, models: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Días de ejemplo por modelo; cualquier fallo de lectura deja la tarjeta en estado vacío."""
+    try:
+        return compare.aggregate(paths, models)
+    except Exception:  # la tarjeta es opcional y no debe romper el informe
+        return None
 
 
 def aggregate(paths: Paths) -> dict[str, Any] | None:
@@ -67,4 +76,5 @@ def aggregate(paths: Paths) -> dict[str, Any] | None:
         "holdout_evaluations_total": card.get("holdout_evaluations_total", 0),
         "models": models,
         "history": history,
+        "compare": _compare(paths, card["models"]),
     }

@@ -1209,6 +1209,131 @@
     $('#btReading').textContent = last.length > 1
       ? 'Entre la primera y la última ejecución el error ha pasado de ' + num(first.rmse) + ' a ' + num(lastRun.rmse) + ' MW (' + sgn((first.rmse - lastRun.rmse) / first.rmse * 100, 1) + ' %). La línea gris es la mejor marca hasta cada momento; el objetivo es cruzar la línea discontinua del operador.'
       : 'Con una sola ejecución todavía no hay tendencia; cada nueva prueba añadirá un punto.';
+
+    /* ---- Un día visto por cada modelo ---- */
+    (function () {
+      var CP = BT.compare, MC = (D.model || {}).compare || {}, info = MC.models || {};
+      var card = $('#cmpCard'), emp = $('#cmpEmpty');
+      if (!CP || !CP.days || !CP.days.length) {
+        card.style.display = 'none';
+        emp.hidden = false; emp.textContent = 'Todavía no hay predicciones día a día de los modelos para dibujar este gráfico.';
+        return;
+      }
+      $('#cmpIntro').textContent = MC.intro || 'Elija un día de la prueba y compare lo que habría dicho cada modelo con lo que ocurrió.';
+      $('#cmpRankGl').innerHTML = gl('rmse', 'error típico');
+      var byKey = {}; models.forEach(function (m) { byKey[m.model] = m; });
+      var keys = CP.models.filter(function (k) { return byKey[k]; });
+      var nameOf = function (k) { return (info[k] && info[k].name) || byKey[k].label; };
+      var KIND = { windy: ['Más ventoso', 'mucho viento'], typical: ['Típico', 'viento normal'], calm: ['Más tranquilo', 'poco viento'] };
+      var months = []; CP.days.forEach(function (d) { if (months.indexOf(d.month) < 0) months.push(d.month); });
+      var kinds = ['windy', 'typical', 'calm'].filter(function (k) { return CP.days.some(function (d) { return d.kind === k; }); });
+      function find(mo, kd) {
+        return CP.days.filter(function (d) { return d.month === mo && d.kind === kd; })[0] ||
+          CP.days.filter(function (d) { return d.month === mo; })[0];
+      }
+      var st = { month: months[months.length - 1], kind: kinds.indexOf('typical') >= 0 ? 'typical' : kinds[0], hidden: {}, band: null };
+      var dayNow = function () { return find(st.month, st.kind); };
+      var hasBand = function (d, k) { return d.m[k] && d.m[k].lo; };
+      var bandDefault = function (d) { return hasBand(d, 'lgbm_cqr') ? 'lgbm_cqr' : (keys.filter(function (k) { return hasBand(d, k); })[0] || null); };
+      st.band = bandDefault(dayNow());
+      var fmtH = new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+      var fmtD = new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Berlin', weekday: 'short', day: 'numeric', month: 'short' });
+      var fmtDL = new Intl.DateTimeFormat('es-ES', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' });
+      var hm = function (ms) { var p = fmtH.formatToParts(ms), o = {}; p.forEach(function (x) { o[x.type] = +x.value; }); return o; };
+      var tOf = function (d, i) { return d.t0 + i * CP.step_min * 60000; };
+      var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+      var colorFor = function (c, k) { var m = byKey[k]; return colorOf(c, m, cand.indexOf(m)); };
+
+      function seg(el, items, cur, on) {
+        $(el).innerHTML = items.map(function (it) { return '<button type="button" data-k="' + esc(it[0]) + '" aria-pressed="' + (it[0] === cur) + '">' + esc(it[1]) + '</button>'; }).join('');
+        $$(el + ' button').forEach(function (b) { b.addEventListener('click', function () { on(b.getAttribute('data-k')); }); });
+      }
+      function legendBtns(c) {
+        var items = [['real', 'Producción real', c.ink, false]].concat(keys.map(function (k) { return [k, nameOf(k), colorFor(c, k), byKey[k].kind === 'operador']; }));
+        $('#cmpLegend').innerHTML = items.map(function (it) {
+          return '<button type="button" data-k="' + esc(it[0]) + '" aria-pressed="' + !st.hidden[it[0]] + '"><i class="ln' + (it[3] ? ' dash' : '') + '" style="border-top-color:' + it[2] + '"></i>' + esc(it[1]) + '</button>';
+        }).join('');
+        $$('#cmpLegend button').forEach(function (b) {
+          b.addEventListener('click', function () { var k = b.getAttribute('data-k'); st.hidden[k] = !st.hidden[k]; b.setAttribute('aria-pressed', String(!st.hidden[k])); update(false); });
+        });
+      }
+      function bandBtns() {
+        var d = dayNow(), ks = keys.filter(function (k) { return hasBand(d, k); });
+        if (st.band && !hasBand(d, st.band)) st.band = bandDefault(d);
+        seg('#cmpBand', [['', 'Ninguno']].concat(ks.map(function (k) { return [k, nameOf(k)]; })), st.band || '', function (k) { st.band = k || null; bandBtns(); redraw(); });
+      }
+      function rank() {
+        var d = dayNow(), vis = keys.filter(function (k) { return !st.hidden[k] && d.err[k] != null; }).sort(function (a, b) { return d.err[a] - d.err[b]; });
+        var mx = Math.max.apply(null, vis.map(function (k) { return d.err[k]; }).concat([1])), c = C();
+        $('#cmpRank').innerHTML = vis.length ? vis.map(function (k, i) {
+          return '<li><div class="rk-h"><i class="sw dot" style="background:' + colorFor(c, k) + '"></i><b>' + esc(nameOf(k)) + '</b>' + (i === 0 && vis.length > 1 ? '<span class="chip ok">el que menos falló</span>' : '') +
+            '<span class="rk-v">se equivocó de media en <b>' + num(d.err[k]) + ' MW</b></span></div><div class="rk-bar"><i style="width:' + (100 * d.err[k] / mx).toFixed(1) + '%;background:' + colorFor(c, k) + '"></i></div>' +
+            '<div class="rk-t">' + esc((info[k] && info[k].text) || '') + '</div></li>';
+        }).join('') : '<li class="muted">Active algún modelo en la leyenda para ver su error.</li>';
+      }
+      function head() {
+        var d = dayNow(), k = KIND[d.kind];
+        $('#cmpDay').textContent = fmtDL.format(pd(d.date)).replace(/^./, function (x) { return x.toUpperCase(); }) + ' · ' + k[1] + ' (producción media real ' + num(d.mean) + ' MW)';
+      }
+      function build(c) {
+        legendBtns(c); rank();
+        var d = dayNow(), n = d.real.length, ti = d.ti, pre = new Array(ti).fill(null);
+        var narrow = $('#cmpChart').clientWidth < 560, every = narrow ? 12 : 6;
+        var isTick = function (i) { var h = hm(tOf(d, i)); return h.minute === 0 && h.hour % every === 0; };
+        var cats = []; for (var i = 0; i < n; i++) cats.push(String(i));
+        var series = [];
+        var lagIdx = CP.lag_min != null && keys.indexOf('persistence') >= 0 ? Math.round((d.closure - CP.lag_min * 60000 - d.t0) / (CP.step_min * 60000)) : null;
+        var closeIdx = Math.round((d.closure - d.t0) / (CP.step_min * 60000));
+        var ml = function (idx, text, col) { return { xAxis: idx, label: { show: true, formatter: text, rotate: 90, position: 'insideEndTop', color: col, fontSize: 11.5, fontFamily: FONT }, lineStyle: { color: col, type: 'dashed', width: 1.2 } }; };
+        var lines = [ml(closeIdx, 'Cierre', c.ink)];
+        if (lagIdx != null && !st.hidden.persistence) lines.push(ml(lagIdx, 'Último dato que usa «' + nameOf('persistence').toLowerCase() + '»', c.muted));
+        series.push({ name: '__marks', type: 'line', data: [], silent: true, tooltip: { show: false },
+          markLine: { symbol: 'none', silent: true, data: lines, animation: false },
+          markArea: { silent: true, itemStyle: { color: c.line, opacity: .35 }, label: { show: true, position: 'insideTopLeft', color: c.muted, fontSize: 11.5, formatter: 'Día que se predice', fontFamily: FONT }, data: [[{ xAxis: ti }, { xAxis: n - 1 }]] } });
+        if (st.band && hasBand(d, st.band) && !st.hidden[st.band]) {
+          var b = d.m[st.band], col = colorFor(c, st.band);
+          series.push({ name: '__lo', type: 'line', stack: 'band', silent: true, symbol: 'none', lineStyle: { opacity: 0 }, tooltip: { show: false }, data: pre.concat(b.lo) });
+          series.push({ name: '__band', type: 'line', stack: 'band', silent: true, symbol: 'none', lineStyle: { opacity: 0 }, tooltip: { show: false }, areaStyle: { color: col, opacity: .18 },
+            data: pre.concat(b.hi.map(function (h, j) { return h == null || b.lo[j] == null ? null : h - b.lo[j]; })) });
+        }
+        if (!st.hidden.real) series.push({ name: 'real', type: 'line', data: d.real, symbol: 'none', connectNulls: false, z: 6, lineStyle: { color: c.ink, width: 2.8 } });
+        keys.forEach(function (k) {
+          if (st.hidden[k] || !d.m[k]) return;
+          var isOp = byKey[k].kind === 'operador';
+          series.push({ name: k, type: 'line', data: pre.concat(d.m[k].q50), symbol: 'none', z: isOp ? 5 : 4, lineStyle: { color: colorFor(c, k), width: isOp ? 2 : 2, type: isOp ? 'dashed' : 'solid', opacity: isOp ? 1 : .95 } });
+        });
+        return Object.assign(base(c), {
+          grid: { left: 58, right: 14, top: 28, bottom: 44 },
+          xAxis: Object.assign({ type: 'category', data: cats, boundaryGap: false }, axisBase(c), {
+            axisTick: { show: false },
+            axisLabel: { color: c.muted, fontSize: 11.5, fontFamily: FONT, margin: 10, lineHeight: 16, interval: function (i) { return isTick(i); }, hideOverlap: true,
+              formatter: function (v) { var h = hm(tOf(d, +v)); var t = pad(h.hour) + ':' + pad(h.minute); return h.hour === 0 ? t + '\n' + fmtD.format(tOf(d, +v)) : t; } },
+            splitLine: { show: true, interval: function (i) { return isTick(i); }, lineStyle: { color: c.line } }
+          }),
+          yAxis: Object.assign({ type: 'value', min: 0, name: 'MW', nameTextStyle: { color: c.muted, fontSize: 11, align: 'right' } }, axisBase(c), { axisLine: { show: false }, axisTick: { show: false } }),
+          tooltip: Object.assign({}, base(c).tooltip, { trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: c.muted, width: 1 } }, formatter: function (ps) {
+            var i = ps[0].dataIndex, ms = tOf(d, i), h = hm(ms);
+            var row = function (col, dash, name, v) { return '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between"><span><i style="display:inline-block;width:14px;border-top:3px ' + (dash ? 'dashed' : 'solid') + ' ' + col + ';vertical-align:middle;margin-right:7px"></i>' + esc(name) + '</span><b>' + (v == null ? '—' : num(v) + ' MW') + '</b></div>'; };
+            var out = '<div style="max-width:260px;white-space:normal"><b>' + esc(fmtD.format(ms)) + ', ' + pad(h.hour) + ':' + pad(h.minute) + '</b> <span style="opacity:.7">(hora de Berlín)</span>';
+            if (!st.hidden.real) out += row(c.ink, false, 'Producción real', d.real[i]);
+            keys.forEach(function (k) { if (st.hidden[k] || !d.m[k]) return; out += row(colorFor(c, k), byKey[k].kind === 'operador', nameOf(k), i < ti ? null : d.m[k].q50[i - ti]); });
+            if (st.band && hasBand(d, st.band) && !st.hidden[st.band] && i >= ti) out += '<div style="margin-top:4px;opacity:.8">Rango del 80 % de ' + esc(nameOf(st.band)) + ': ' + num(d.m[st.band].lo[i - ti]) + ' a ' + num(d.m[st.band].hi[i - ti]) + ' MW</div>';
+            return out + '</div>';
+          } }),
+          series: series
+        });
+      }
+      function redraw() { draw('cmpChart', false); }
+      function update(full) { head(); rank(); if (full) { bandBtns(); } redraw(); }
+      function selectors() {
+        seg('#cmpMonth', months.map(function (m) { return [m, MON3[+m.slice(5) - 1] + ' ' + m.slice(2, 4)]; }), st.month, function (k) { st.month = k; selectors(); update(true); });
+        seg('#cmpKind', kinds.map(function (k) { return [k, KIND[k][0]]; }), st.kind, function (k) { st.kind = k; selectors(); update(true); });
+      }
+      selectors(); bandBtns(); head();
+      mount('cmpChart', build);
+      var crt = null;
+      window.addEventListener('resize', function () { clearTimeout(crt); crt = setTimeout(redraw, 200); });
+    })();
   })();
 
   /* ============ Pie ============ */

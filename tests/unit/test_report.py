@@ -2,6 +2,7 @@
 """Pruebas sin red del informe ejecutivo con datos sintéticos."""
 
 import datetime as dt
+import json
 import re
 import shutil
 from pathlib import Path
@@ -460,3 +461,81 @@ def test_backtest_chapter_reads_scorecard(tmp_path: Path) -> None:
     # un JSON corrupto o sin modelos también da estado vacío
     (tmp_path / "data" / "backtest" / "report" / "scorecard.json").write_text("{", "utf-8")
     assert backtest.aggregate(paths) is None
+
+
+def _compare_runs(root: Path, lag: int = 180) -> list[dict[str, Any]]:
+    """Dos modelos sintéticos con 3 días de enero y 2 de febrero de validación."""
+    days = [dt.date(2026, 1, d) for d in (10, 11, 12)] + [dt.date(2026, 2, d) for d in (3, 4)]
+    mean = {d: 1000.0 * (i + 1) for i, d in enumerate(days)}
+    models = []
+    for key, lagged in (("operator", False), ("persistence", True)):
+        rows = []
+        for d in days:
+            start = dt.datetime.combine(d - dt.timedelta(days=1), dt.time(23), tzinfo=dt.UTC)
+            for i in range(96):
+                rows.append(
+                    {
+                        "forecast_issue_date": d - dt.timedelta(days=1),
+                        "target_date": d,
+                        "ts_utc": start + dt.timedelta(minutes=15 * i),
+                        "n_steps_day": 96,
+                        "y_mw": mean[d],
+                        "q50_mw": mean[d] + 100.0,
+                        "q10_mw": None if key == "operator" else mean[d] - 50.0,
+                        "q90_mw": None if key == "operator" else mean[d] + 50.0,
+                    }
+                )
+        run_id = f"20261022T000000Z-{key}-validation"
+        d_run = root / "data" / "backtest" / "runs" / run_id
+        d_run.mkdir(parents=True)
+        pl.DataFrame(rows).write_parquet(d_run / "predictions.parquet")
+        params = {"lag_min": lag} if lagged else {}
+        (d_run / "run.json").write_text(json.dumps({"params": params}), "utf-8")
+        models.append(
+            {"model": key, "label": key, "kind": "modelo", "validation": {"run_id": run_id}}
+        )
+    return models
+
+
+def test_compare_picks_days_per_month_and_cuts_from_params(tmp_path: Path) -> None:
+    from predico50hz.report import compare  # noqa: PLC0415
+
+    models = _compare_runs(tmp_path, lag=240)
+    paths = Paths(root=tmp_path, nwp_bronze=tmp_path / "x", mastr_raw=tmp_path / "x")
+    out = compare.aggregate(paths, models)
+    assert out is not None
+    assert out["lag_min"] == 240  # sale de los params de la ejecución, no del código
+    picks = {(d["month"], d["kind"]): d["date"] for d in out["days"]}
+    assert picks[("2026-01", "windy")] == "2026-01-12"
+    assert picks[("2026-01", "calm")] == "2026-01-10"
+    assert picks[("2026-01", "typical")] == "2026-01-11"
+    assert [d["date"] for d in out["days"] if d["month"] == "2026-02"] == [
+        "2026-02-04",
+        "2026-02-03",
+    ]
+    d0 = out["days"][0]
+    assert d0["err"]["operator"] == 100
+    assert d0["m"]["operator"].get("lo") is None
+    assert d0["m"]["persistence"]["lo"][0] is not None
+    assert len(d0["real"]) == d0["ti"] + len(d0["m"]["operator"]["q50"])
+    # presupuesto: bloque pequeño y sin decimales
+    assert len(json.dumps(out, separators=(",", ":"))) < 300_000
+    assert all(isinstance(x, int | None) for x in d0["real"])
+
+
+def test_compare_empty_states(tmp_path: Path) -> None:
+    from predico50hz.report import compare  # noqa: PLC0415
+
+    paths = Paths(root=tmp_path, nwp_bronze=tmp_path / "x", mastr_raw=tmp_path / "x")
+    models = [
+        {"model": "operator", "label": "x", "kind": "operador", "validation": {"run_id": "no"}}
+    ]
+    assert compare.aggregate(paths, models) is None  # sin predicciones
+    assert compare.lag_minutes(paths, models) is None
+    # la tarjeta vacía no rompe el capítulo
+    _scorecard_json(tmp_path)
+    from predico50hz.report import backtest  # noqa: PLC0415
+
+    bt = backtest.aggregate(paths)
+    assert bt is not None
+    assert bt["compare"] is None

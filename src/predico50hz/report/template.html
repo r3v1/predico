@@ -254,11 +254,27 @@
     <div class="ch-head reveal"><div class="ch-num">10</div><div><h2>¿Mejora el pronóstico?</h2><p class="idea"><span class="idea-label">La idea clave</span><span id="idea10"></span></p></div></div>
     <div class="reveal" id="btVerdict"></div>
 
-    <div class="ch-sub reveal"><i>a</i><h3>Cada modelo frente al operador</h3></div>
+    <div class="ch-sub reveal"><i>a</i><h3>Un día visto por cada modelo</h3></div>
+    <div class="prose reveal"><p id="cmpIntro"></p></div>
+    <div class="card cmp reveal" id="cmpCard">
+      <div class="cmp-ctl">
+        <div class="cmp-field"><span class="cmp-lab">Mes de la prueba</span><div class="seg" id="cmpMonth" role="group" aria-label="Mes de la prueba"></div></div>
+        <div class="cmp-field"><span class="cmp-lab">Tipo de día</span><div class="seg" id="cmpKind" role="group" aria-label="Tipo de día"></div></div>
+      </div>
+      <h4 class="cmp-day" id="cmpDay"></h4>
+      <div class="chart cmp-chart" id="cmpChart" role="img" aria-label="Producción real y previsión de cada modelo para el día elegido"></div>
+      <div class="lg-states" id="cmpLegend" role="group" aria-label="Mostrar u ocultar modelos"></div>
+      <div class="cmp-band"><span class="cmp-lab">Rango del 80 % de</span><div class="seg" id="cmpBand" role="group" aria-label="Modelo del que se dibuja el rango del 80 %"></div></div>
+      <h4 class="cmp-rank-t">Cuánto se equivocó cada modelo ese día <span class="muted">(<span id="cmpRankGl"></span>; menos es mejor)</span></h4>
+      <ol class="cmp-rank" id="cmpRank"></ol>
+    </div>
+    <div class="empty" id="cmpEmpty" hidden></div>
+
+    <div class="ch-sub reveal"><i>b</i><h3>Cada modelo frente al operador</h3></div>
     <div class="card reveal"><div class="bt-scroll" id="btTable"></div></div>
     <div class="prose reveal" id="btNotes"></div>
 
-    <div class="ch-sub reveal"><i>b</i><h3>¿Vamos a mejor?</h3></div>
+    <div class="ch-sub reveal"><i>c</i><h3>¿Vamos a mejor?</h3></div>
     <div class="grid-2 reveal">
       <div class="card"><div class="card-title"><span>Cada ejecución del backtest</span></div><div class="chart" id="btHist"></div><div class="legend" id="btHistLegend"></div></div>
       <div class="card"><div class="card-title"><span>Error de cada mes de prueba</span></div><div class="chart" id="btMonthly"></div><div class="legend" id="btMonthlyLegend"></div></div>

@@ -14,3 +14,28 @@ metrics:
   - title: Puntuación del rango
     text: "Es la medida que usa la liga para los rangos: premia los estrechos que aciertan y castiga los anchos o los que fallan."
     gl: winkler
+
+# Tarjeta «Un día visto por cada modelo» (capítulo 10). Clave = identificador del modelo del backtest;
+# `name` es el nombre corto del botón y `text` la explicación en llano (2–3 frases).
+compare:
+  title: Un día visto por cada modelo
+  intro: "Elija un día de la prueba. La línea gruesa y continua es lo que se produjo de verdad; cada color es lo que habría dicho un modelo con los datos que tenía al cierre."
+  models:
+    operator:
+      name: Operador
+      text: "Es la previsión que publica el operador de la red para ese día. Es la referencia que queremos igualar o mejorar y no da rango, solo un valor."
+    persistence:
+      name: Repetir lo último
+      text: "Copia para mañana la última producción publicada antes del cierre. Es la regla más simple posible y acierta cuando el viento no cambia de un día para otro."
+    climatology:
+      name: Media histórica
+      text: "Dice lo normal a esa hora en ese mes, sin mirar el tiempo que viene. Sirve para saber cuánto aporta mirar la previsión meteorológica."
+    power_curve:
+      name: Curva de potencia
+      text: "Traduce el viento previsto a energía con la curva típica de un aerogenerador. Depende por completo de acertar con el viento."
+    lgbm:
+      name: Árboles (LightGBM)
+      text: "Aprende de los meses anteriores qué producción acompañó a cada previsión de viento y de calendario. Es la primera versión, sin ajustar."
+    lgbm_cqr:
+      name: Árboles con rango (CQR)
+      text: "Usa el mismo valor central que el modelo de árboles y le añade un rango del 80 % calibrado con los errores pasados. Por eso su línea coincide con la de arriba."

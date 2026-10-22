@@ -26,6 +26,7 @@ uv run python -m predico50hz.report --out /tmp/x/index.html --root .
 | 8 El reloj diario | `sources.py` | `data/stage0/dynamical_check.json` (latencia), `sources.yaml` (`clock`) |
 | 9 Riesgos y decisiones | `content.py` | `report/insights.yaml` |
 | 10 El modelo | `content.py`, `plan.py` | `report/model.yaml`, puertas G0–G2 (issues `tipo:puerta` de GitHub) |
+| ¿Mejora el pronóstico? (`#c10`) | `backtest.py`, `compare.py` | `data/backtest/report/scorecard.json`, predicciones de `data/backtest/runs/<run_id>/` y generación de `data/silver/entsoe/generation` |
 | Pie | `build.py` | versiones: snapshot del bronce, export de MaStR, última descarga de ENTSO-E |
 
 La volumetría descargada de dynamical es una estimación: solo las pasadas leídas en serie (`init_workers == 1`) son atribuibles (`docs/stage1-dynamical.md`); se multiplica la mediana por las pasadas ingeridas.
@@ -47,8 +48,18 @@ uv run python -m predico50hz.report --offline
 - **`labels.yaml`**: lenguaje llano de los hitos (clave = número del título del milestone), hito previo ya cumplido, reglas de corte, etapas de descarga y títulos de las épicas (clave = marca `backlog:<id>`).
 - **`sources.yaml`**: tarjetas de fuentes, lugares y rutas del mapamundi (la ubicación del NAS es orientativa: ajustar `lat`/`lon`), texto del recorrido del dato y notas del reloj.
 - **`glossary.yaml`**: términos con explicación emergente; en la plantilla se marcan con `<span class="gl" data-gl="id">`.
-- **`model.yaml`**: medidas y fecha de la v0.1 (capítulo 10).
+- **`model.yaml`**: medidas y fecha de la v0.1 (capítulo «El modelo») y, en `compare`, el nombre corto y la explicación en llano de cada modelo para el gráfico «Un día visto por cada modelo». Una clave nueva (el id del modelo del backtest) sin texto aparece igualmente, con su etiqueta del cuadro de mando.
 - **`variables.yaml`**: texto, unidad e icono de cada variable meteorológica (capítulo 4). Las variables y su orden salen de `config.py`; una variable nueva sin texto aparece igualmente, sin descripción.
+
+## Gráfico «Un día visto por cada modelo» (`#c10`, apartado a)
+
+`report/compare.py` toma, de cada modelo del scorecard, las predicciones de su última ejecución de validación (el `run_id` del propio scorecard) y recorta solo los días que se muestran:
+
+- **Días**: por cada mes de validación, el de más viento, el más tranquilo y el típico (el más cercano a la mediana de la producción real media del día D+1). Son 3 por mes (24 con 8 meses); la etiqueta es «Más ventoso / Típico / Más tranquilo» y el selector es mes + tipo de día.
+- **Eje**: 18 h de producción real antes del cierre de D y todo el día D+1, en malla de 30 min (los errores por día se calculan con los 15 min originales) y MW enteros. El instante de cierre sale de `closure_utc`; la marca «último dato que usa repetir lo último» es cierre − `lag_min`, leído de `run.json` de la ejecución de persistencia (si no hay, no se dibuja).
+- **Rango del 80 %**: solo de un modelo a la vez (por defecto LightGBM con CQR). Cualquier modelo con Q10/Q90 puede elegirse en el selector.
+- **Tamaño**: ~110 KB de JSON (presupuesto 300 KB); la prueba `test_compare_*` lo acota. Si no hay ejecuciones o predicciones, `compare` es `null` y la tarjeta se sustituye por un estado vacío.
+- Las horas del eje son de Berlín, como el cierre.
 
 ## Añadir un capítulo nuevo
 

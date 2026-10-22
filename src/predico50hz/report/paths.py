@@ -49,6 +49,11 @@ class Paths:
         return self.root / "data" / "backtest" / "report" / "scorecard.json"
 
     @property
+    def backtest_runs(self) -> Path:
+        """Ejecuciones del backtest (`predictions.parquet`, `run.json`)."""
+        return self.root / "data" / "backtest" / "runs"
+
+    @property
     def centroids(self) -> Path:
         return self.root / "config" / "centroids.yaml"
 

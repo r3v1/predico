@@ -12,6 +12,7 @@ Lo completado en la Fase 1 hasta el 20 oct 2026, cuando el seguimiento pasó a l
 | 16 oct | Etapa 2 (13 meses) descargada y validada al 100 % |
 | 16 oct | Tabla oro de variables, marco de backtest y tres referencias evaluadas; informe ejecutivo v0.4 |
 | 20 oct | Racha G0 en 5/7; reintentos de red y de ENTSO-E en la operación diaria; seguimiento movido a GitHub |
+| 22 oct | **G0 cumplida** en `hetzner-g0`: 7/7 días (16–22 oct) con `nwp-daily` y `entsoe-daily` en `ok`; dynamical llegó entre 08:15 y 08:18 UTC, `enfo` a las 07:40–07:41 y el margen hasta el cierre osciló entre 281 y 284 min. `entsoe-hourly` tuvo 4 fallos sueltos (HTTP 400 de ENTSO-E) recuperados a la hora siguiente; no cuentan para G0 |
 
 ## NWP: ingesta de IFS ENS (F1)
 

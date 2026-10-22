@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from predico50hz.features.timing import closure_utc
+from predico50hz.ingest.entsoe.bronze import stamp, write_chunk, write_run_info
 from predico50hz.ingest.entsoe.client import NoDataError
 from predico50hz.orchestration import jobs
 from predico50hz.orchestration import publication as pub
@@ -186,3 +187,63 @@ def test_hourly_job_survives_generation_error(
     rec = read_records(s.run_log_path)[-1]
     assert rec["status"] == "ok"
     assert "caído" in rec["details"]["generation_error"]
+
+
+def _bronze_fetch(
+    root: Path, fetched: dt.datetime, n: dict[str, int], start: dt.datetime, end: dt.date | None
+) -> None:
+    st = stamp(fetched)
+    for psr, k in n.items():
+        write_chunk(
+            root, "generation", st, psr, start, start + dt.timedelta(days=1), xml(start, k, psr)
+        )
+    if end is not None:
+        info = {"start": start.date().isoformat(), "end": end.isoformat()}
+        write_run_info(root, "generation", st, info)
+
+
+def test_observations_from_bronze_discards_historic_and_unchecked(tmp_path: Path) -> None:
+    d = dt.date(2026, 3, 10)
+    s = at(d, 0)
+    ok = at(d, 9, 5)
+    _bronze_fetch(tmp_path, ok, {"B18": 32, "B19": 30}, s, d + dt.timedelta(days=1))
+    _bronze_fetch(tmp_path, at(d, 10, 5), {"B18": 8, "B19": 8}, s, d - dt.timedelta(days=5))
+    _bronze_fetch(tmp_path, at(d, 11, 5), {"B18": 8, "B19": 8}, s, None)  # sin _run.json
+    _bronze_fetch(tmp_path, at(d - dt.timedelta(days=3), 9), {"B18": 8, "B19": 8}, s, d)
+    got = pub.observations_from_bronze(tmp_path, d)
+    assert len(got) == 1
+    assert got[0]["observed_at"] == ok.isoformat(timespec="seconds")
+    assert got[0]["last_step"] == "2026-03-10T07:15+00:00"
+    assert got[0]["source"] == "bronze"
+    assert pub.lag_minutes(got[0]) == 110.0
+
+
+def test_merge_prefers_probe_in_same_minute() -> None:
+    d = dt.date(2026, 3, 10)
+    t = at(d, 9, 5)
+    probe = [_obs(t + dt.timedelta(seconds=20), t - dt.timedelta(minutes=50))]
+    bronze = [
+        {**_obs(t, t - dt.timedelta(minutes=70)), "source": "bronze"},
+        {**_obs(at(d, 8, 5), at(d, 7)), "source": "bronze"},
+    ]
+    got = pub.merge_observations(probe, bronze)
+    assert [o["source"] for o in got] == ["bronze", "probe"]
+    assert pub.lag_minutes(got[1]) == 50.3
+
+
+def test_near_closure_and_sources_in_compute(tmp_path: Path) -> None:
+    d = dt.date(2026, 3, 10)
+    c = closure_utc(d)
+    bronze = tmp_path / "bronze"
+    p = tmp_path / "gen.jsonl"
+    pub.append_observation(p, _obs(c - dt.timedelta(minutes=5), c - dt.timedelta(minutes=100)))
+    pub.append_observation(p, _obs(c - dt.timedelta(hours=5), c - dt.timedelta(hours=6)))
+    # descarga del bronce 65 min antes del cierre, con el último cuarto 40 min antes de ella
+    fetched = c - dt.timedelta(minutes=65)
+    n = int((fetched - dt.timedelta(minutes=40) - at(d, 0)).total_seconds() // 900)
+    _bronze_fetch(bronze, fetched, {"B18": n, "B19": n}, at(d, 0), d + dt.timedelta(days=1))
+    rep = pub.compute(bronze, d, at(d, 20), None, p)["generation_lag"]
+    assert rep["n_by_source"] == {"probe": 2, "bronze": 1}
+    assert rep["near_closure"]["n"] == 2  # la de hace 5 h queda fuera
+    assert rep["near_closure"]["max_min"] == 95.0
+    assert "previas al cierre" in pub.render({"datasets": {}, "warning": "", "generation_lag": rep})

@@ -19,7 +19,7 @@ from typing import Any
 import polars as pl
 
 from predico50hz.features.timing import closure_utc, target_grid
-from predico50hz.ingest.entsoe.bronze import list_chunks, read_chunk
+from predico50hz.ingest.entsoe.bronze import Chunk, list_chunks, read_chunk
 from predico50hz.ingest.entsoe.client import EntsoeClient, NoDataError
 from predico50hz.ingest.entsoe.datasets import DATASETS as ENTSOE_DATASETS
 from predico50hz.ingest.entsoe.datasets import WIND_OFFSHORE, WIND_ONSHORE
@@ -211,7 +211,10 @@ def compute(
         days = [x for x in days if x["status"] != "no_fetches"]
         result["datasets"][dataset] = {"summary": summarize(days), "days": days}
     if observations is not None:
-        result["generation_lag"] = lag_report(read_observations(observations), since, now)
+        merged = merge_observations(
+            read_observations(observations), observations_from_bronze(bronze, since)
+        )
+        result["generation_lag"] = lag_report(merged, since, now)
     return result
 
 
@@ -288,6 +291,53 @@ def read_observations(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def observations_from_bronze(bronze: Path, since: dt.date) -> list[dict[str, Any]]:
+    """Observaciones equivalentes a la consulta ligera, reconstruidas del bronce de generación.
+
+    Cada carpeta `fetched_at=` desde `since` da una observación con `observed_at = fetched_at`.
+    Solo cuenta si `_run.json` dice que la ventana pedida llegaba hasta el día de la descarga
+    (`end >= fecha de fetched_at`): una descarga histórica no dice nada del retraso. Sin
+    `_run.json` no se puede comprobar y se descarta.
+    """
+    lo = dt.datetime.combine(since, dt.time(0), tzinfo=dt.UTC)
+    chunks: dict[dt.datetime, list[Chunk]] = {}
+    for c in list_chunks(bronze, "generation"):
+        if c.fetched_at >= lo and not c.nodata:
+            chunks.setdefault(c.fetched_at, []).append(c)
+    out: list[dict[str, Any]] = []
+    for f in list_fetches(bronze, "generation"):
+        group = chunks.get(f.fetched_at)
+        if not group or f.end is None or f.end < f.fetched_at.date():
+            continue
+        try:
+            last = last_published_step([read_chunk(c) for c in group])
+        except pl.exceptions.PolarsError, ValueError, OSError:
+            continue  # descarga ilegible: no aporta observación
+        out.append(
+            {"observed_at": f.fetched_at.isoformat(timespec="seconds")}
+            | last
+            | {"source": "bronze"}
+        )
+    return out
+
+
+def merge_observations(
+    probe: list[dict[str, Any]], bronze: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Une ambas fuentes por `observed_at`; en el mismo minuto gana `probe`."""
+    by_minute: dict[dt.datetime, dict[str, Any]] = {}
+    for o in bronze:
+        t = dt.datetime.fromisoformat(o["observed_at"]).replace(second=0, microsecond=0)
+        by_minute[t] = {**o, "source": "bronze"}
+    for o in probe:
+        t = dt.datetime.fromisoformat(o["observed_at"]).replace(second=0, microsecond=0)
+        by_minute[t] = {**o, "source": "probe"}
+    return sorted(by_minute.values(), key=lambda o: dt.datetime.fromisoformat(o["observed_at"]))
+
+
+NEAR_CLOSURE = dt.timedelta(hours=2)  # ventana previa al cierre que importa para la persistencia
+
+
 def lag_minutes(obs: dict[str, Any]) -> float | None:
     if not obs.get("last_step"):
         return None
@@ -336,10 +386,22 @@ def lag_report(obs: list[dict[str, Any]], since: dt.date, now: dt.datetime) -> d
             )
         d += dt.timedelta(days=1)
     at_close = [x["lag_at_closure_min"] for x in days if x["status"] == "measured"]
+    near = [
+        x
+        for t, o in parsed
+        if closure_utc(t.date()) - NEAR_CLOSURE <= t <= closure_utc(t.date())
+        and (x := lag_minutes(o)) is not None
+    ]
+    n_source: dict[str, int] = {}
+    for _, o in parsed:
+        src = o.get("source", "probe")
+        n_source[src] = n_source.get(src, 0) + 1
     return {
         "warning": LAG_WARNING,
         "n_observations": len(parsed),
+        "n_by_source": n_source,
         "per_observation": _lag_stats(lags),
+        "near_closure": _lag_stats(near),
         "at_closure": _lag_stats(at_close),
         "days": days,
     }
@@ -347,10 +409,17 @@ def lag_report(obs: list[dict[str, Any]], since: dt.date, now: dt.datetime) -> d
 
 def _render_lag(lag: dict[str, Any]) -> list[str]:
     po, ac = lag["per_observation"], lag["at_closure"]
-    lines = ["\n[generación real B18+B19] " + f"observaciones={lag['n_observations']}"]
+    nc = lag.get("near_closure", {"n": 0})
+    src = " ".join(f"{k}={v}" for k, v in lag.get("n_by_source", {}).items())
+    lines = ["\n[generación real B18+B19] " + f"observaciones={lag['n_observations']} ({src})"]
     if po["n"]:
         lines.append(
             f"  retraso (observado - paso) mediana/peor: {po['median_min']} / {po['max_min']} min"
+        )
+    if nc["n"]:
+        lines.append(
+            f"  retraso en las 2 h previas al cierre (n={nc['n']}) mediana/peor: "
+            f"{nc['median_min']} / {nc['max_min']} min"
         )
     if ac["n"]:
         lines.append(f"  retraso al cierre mediana/peor: {ac['median_min']} / {ac['max_min']} min")

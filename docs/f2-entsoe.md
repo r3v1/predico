@@ -131,6 +131,8 @@ Cada ejecución crea `fetched_at=<UTC>` nuevo; la plata toma el valor de la desc
 
 **Idempotencia.** `silver.write_silver` compara el contenido con la tabla existente y no crea versión de Delta si es idéntico; las claves únicas (`ts_utc`; `(year, psr_type)`; `(ts_utc, psr_type)`) se comprueban al construir y en Pandera. Relanzar `--no-fetch` dos veces deja la versión de Delta intacta en los cuatro datasets. Una descarga nueva solo reescribe plata en los datasets que llevan `fetched_at` como columna (`capacity`, `prices`, `forecast`), por trazabilidad; sin duplicados.
 
+**Revisiones del pronóstico del operador (#28).** Con las 173 descargas horarias de la VM (16 a 23 oct 2026), el pronóstico de cada día objetivo del 17 al 23 oct no cambia nunca: la versión primera y la última coinciden al MW en los 96 cuartos de B18 + B19 (RMSE y MAE de 0 MW). La referencia `operator` puede leer la primera versión publicada (`version="first_published"`, bronce) o la última (`latest`, plata); detalle y límites en `docs/f4-backtest.md` §9.
+
 ## 7. Validación (Pandera)
 
 - Generación: `ts_utc` único, malla de 15 min sin saltos, `wind_*_mw` ≥ 0 y ≤ 8 000 (marina) / 40 000 MW (terrestre) en el esquema, `*_src` en {original, a03, hourly, gap}, `*_gap_len` ≥ 0. El informe añade el cociente máximo/capacidad por año (y lo lista si supera 1,10).

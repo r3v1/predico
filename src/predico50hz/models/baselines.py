@@ -3,7 +3,11 @@
 - `climatology`: cuantiles empíricos del factor de capacidad por hora local y mes.
 - `power_curve`: cuantiles del factor de capacidad por tramos de `wshub_all_mean`, interpolados.
 - `operator`: pronóstico day-ahead del operador (ENTSO-E B18 + B19) como referencia externa:
-  solo Q50, en MW. Es SOLO benchmark; nunca entra en `predico50hz.features`.
+  solo Q50, en MW. Es SOLO benchmark; nunca entra en `predico50hz.features`. Admite dos
+  versiones (`version`): `latest` (plata, la última descarga; la del histórico) y
+  `first_published` (bronce: la primera descarga que trae ese cuarto de hora; solo hay desde el
+  16 oct 2026). El pronóstico de D+1 aparece hacia las 17:00 UTC de D, después del cierre, así
+  que no existe una «versión vista antes del cierre» (`docs/f4-backtest.md` §9).
 
 - `persistence`: repite lo último conocido de la generación real (ENTSO-E B18 + B19, en MW) en
   el cierre. Solo usa cuartos de hora que empiezan como muy tarde en `cierre - lag_min`
@@ -23,6 +27,8 @@ from predico50hz.features.timing import closure_utc
 from predico50hz.models.base import Array, Model, Prediction, Unit
 
 DEFAULT_OPERATOR = "data/silver/entsoe/forecast"
+DEFAULT_OPERATOR_BRONZE = "data/bronze/entsoe"
+OperatorVersion = Literal["latest", "first_published"]
 DEFAULT_GENERATION = "data/silver/entsoe/generation"
 STEP_S = 900  # malla de 15 min
 STEPS_PER_DAY = 96
@@ -39,6 +45,38 @@ def load_operator_mw(path: str | Path = DEFAULT_OPERATOR) -> pl.DataFrame:
         .agg(pl.col("forecast_mw").sum().alias("op_mw"), pl.col("psr_type").n_unique().alias("n"))
         .filter(pl.col("n") == len(OPERATOR_PSR))
         .select("ts_utc", "op_mw")
+    )
+
+
+def load_operator_first_published_mw(bronze: str | Path = DEFAULT_OPERATOR_BRONZE) -> pl.DataFrame:
+    """Primera versión publicada del pronóstico del operador, en MW por `ts_utc` (B18 + B19).
+
+    Para cada cuarto de hora toma la descarga más antigua del bronce (`fetched_at`) que trae
+    B18 y B19 a la vez. La hora es la de nuestra descarga (cota superior de la publicación).
+    Solo existe desde que la VM descarga cada hora (16 oct 2026); lo anterior no tiene versiones.
+    """
+    from predico50hz.ingest.entsoe.bronze import list_chunks, read_chunk  # noqa: PLC0415
+    from predico50hz.ingest.entsoe.parse import parse_raw  # noqa: PLC0415
+
+    frames: list[pl.DataFrame] = []
+    for c in list_chunks(Path(bronze), "forecast"):
+        if c.nodata:
+            continue
+        d = parse_raw(read_chunk(c)).filter(
+            pl.col("psr_type").is_in(OPERATOR_PSR) & pl.col("value").is_not_null()
+        )
+        frames.append(d.select("ts_utc", "psr_type", "value").with_columns(fetched_at=c.fetched_at))
+    if not frames:
+        return pl.DataFrame(schema={"ts_utc": pl.Datetime("us", "UTC"), "op_mw": pl.Float64})
+    return (
+        pl.concat(frames)
+        .group_by("fetched_at", "ts_utc")
+        .agg(pl.col("value").sum().alias("op_mw"), pl.col("psr_type").n_unique().alias("n"))
+        .filter(pl.col("n") == len(OPERATOR_PSR))
+        .sort("fetched_at")
+        .unique("ts_utc", keep="first", maintain_order=True)
+        .select("ts_utc", "op_mw")
+        .sort("ts_utc")
     )
 
 
@@ -160,6 +198,11 @@ class Operator(Model):
 
     No se entrena. Las filas sin pronóstico del operador salen como NaN y la validación del
     marco las rechaza (en la tabla actual no hay ninguna).
+
+    `version="latest"` (por defecto) lee la plata: la última descarga. `version="first_published"`
+    lee el bronce y usa la primera versión que trajo cada cuarto de hora; las filas anteriores
+    al 16 oct 2026 salen NaN, así que no sirve para el periodo de validación. En la semana
+    medida (17 a 23 oct) ambas versiones coinciden al MW (`docs/f4-backtest.md` §9).
     """
 
     name: ClassVar[str] = "operator"
@@ -168,20 +211,41 @@ class Operator(Model):
     unit: ClassVar[Unit] = "mw"
     is_operator: ClassVar[bool] = True
 
-    def __init__(self, source: str | Path = DEFAULT_OPERATOR) -> None:
+    def __init__(
+        self,
+        source: str | Path = DEFAULT_OPERATOR,
+        version: OperatorVersion = "latest",
+        bronze: str | Path = DEFAULT_OPERATOR_BRONZE,
+    ) -> None:
+        if version not in ("latest", "first_published"):
+            raise ValueError(f"version desconocida: {version!r}")
         self.source = str(source)
+        self.version: OperatorVersion = version
+        self.bronze = str(bronze)
         self._op: pl.DataFrame | None = None
 
     def params(self) -> dict[str, Any]:
-        return {"source": self.source, "psr_types": list(OPERATOR_PSR)}
+        out: dict[str, Any] = {
+            "source": self.source,
+            "psr_types": list(OPERATOR_PSR),
+            "version": self.version,
+        }
+        if self.version == "first_published":
+            out["bronze"] = self.bronze
+        return out
+
+    def _load(self) -> pl.DataFrame:
+        if self.version == "first_published":
+            return load_operator_first_published_mw(self.bronze)
+        return load_operator_mw(self.source)
 
     def fit(self, train: pl.DataFrame) -> None:
         if self._op is None:
-            self._op = load_operator_mw(self.source)
+            self._op = self._load()
 
     def predict(self, df: pl.DataFrame) -> Prediction:
         if self._op is None:
-            self._op = load_operator_mw(self.source)
+            self._op = self._load()
         joined = df.select("ts_utc").join(self._op, on="ts_utc", how="left", maintain_order="left")
         return Prediction(q50=joined["op_mw"].to_numpy().astype(np.float64))
 

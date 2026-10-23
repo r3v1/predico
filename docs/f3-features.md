@@ -161,9 +161,9 @@ Con datos sintéticos (fixture `synth` de `tests/conftest.py`: plata NWP mínima
 
 Además, 40 tests unitarios nuevos y 10 de fuga (50 en total) (`tests/unit/test_features_*.py`): tiempos (cierre 13/14 UTC, ventanas, 92/96/100 con las fechas reales), interpolación y racha por tramos con casos a mano, v³ y E[v³], pesos con capacidad que cambia por fecha, densidad, cizalladura con recortes, objetivo y arrastre de capacidad, idempotencia de la escritura con Delta (incluidas columnas NaN y reemplazo por rango) y validación (detecta cf fuera de rango, NaN, duplicados, huecos y `available_at` tardío). La suite completa (`uv run pytest`: 162 tests), `ruff check`, `ruff format --check` y `pyright` (estricto en `src/`) pasan.
 
-## 9. Precio day-ahead: fuera de la v0.1
+## 9. Precio day-ahead: el de D+1 fuera; el de D, candidato (ADR 0031)
 
-El ADR 0009 exige usar el precio solo si su hora de publicación medida es anterior al cierre. Solo existe **una** observación de su hora de publicación (`fetched_at` 2026-10-16 13:17 UTC, posterior al cierre de verano de ese día), así que **no está medida y no entra**: no hay bloque `price` ni columna `available_at_price`. Para medirla: descargas horarias `uv run python -m predico50hz.ingest.entsoe --dataset prices --days 2` entre las 10:00 y las 14:00 UTC durante varios días, y tomar para cada D la primera `fetched_at` del bronce en la que aparece D+1 (primer `ts_utc` ≥ el inicio del día objetivo). Solo se incorporaría como bloque nuevo con su `available_at_price` si esa hora (con margen, p. ej. el máximo observado) es anterior al cierre (13:00 UTC en verano).
+El ADR 0009 exige usar el precio solo si su hora de publicación medida es anterior al cierre. Ya está medida (#10, `docs/f2-entsoe.md` §3): del 17 al 22 oct 2026 el precio de D+1 se vio completo antes del cierre solo en 3 de 6 días, y el 20 oct no apareció hasta las 19:00 UTC, 6 h después. **El precio de D+1 no entra.** El de D se publica la víspera y siempre está a tiempo: es una pista más débil (curtailment o precios negativos el día del cierre) y se probará en #29 como bloque `price` con su `available_at_price`; solo se queda si mejora la validación. Hasta entonces no hay bloque `price` ni columna `available_at_price`.
 
 ## 10. Decisiones
 
@@ -180,7 +180,7 @@ El ADR 0009 exige usar el precio solo si su hora de publicación medida es anter
 
 - **La latencia NWP es la de producción, no la histórica.** Además dynamical reescribe la pasada previa (`docs/stage0-dynamical.md` §3): la pasada de D guardada en bronce puede no ser bit a bit la que habría visto producción a las 08:30 (se comprobó en dos pasadas y un chunk de una variable, no en todas).
 - **MaStR con altas registradas a posteriori.** La capacidad de la fecha D se reconstruye con el export del 2026-10-15; una unidad dada de alta con retraso aparece en fechas pasadas en las que aún no estaba registrada. Hay una pequeña fuga de información conocida en los pesos (y en `cap_*_mw`) y en el denominador histórico; su magnitud no se ha medido.
-- **Precio sin medir y fuera** (§9). **Sin festivos.**
+- **Sin precio** (§9): el de D+1 llega tarde; el de D está pendiente de probar (#29). **Sin festivos.**
 - **E[v³] asume gaussianidad** del ensemble (μ³ + 3μσ²); no la ha contrastado con los 51 miembros (la plata solo guarda estadísticos).
 - **Altura de buje constante por tipo** (119 m y 104 m, ponderadas por potencia hoy); los parques recientes tienen buje más alto y la capacidad histórica tenía otro reparto.
 - **Racha:** el camino con racha ausente (`gust_missing` = 1) solo se ha ejercitado con datos sintéticos; la plata actual (desde 2025-09-01) siempre la trae. Los valores de racha agregados no se han contrastado a mano con la plata real (sí con casos sintéticos).

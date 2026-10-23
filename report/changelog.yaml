@@ -2,6 +2,13 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.12"
+    date: 2026-10-23
+    title: El precio de mañana llega demasiado justo
+    items:
+      - "El precio del día siguiente solo estuvo publicado antes del cierre la mitad de los días. Un día llegó a las 21:00 de Madrid, así que el modelo no lo usará."
+      - "La previsión del operador llega siempre hacia las 19:00 de Madrid, cuatro horas después del cierre. Solo sirve para compararse con ella."
+      - "El precio de hoy sí está siempre a tiempo, así que se probará como pista más adelante."
   - version: "0.11"
     date: 2026-10-22
     title: Un día visto por cada modelo

@@ -293,6 +293,23 @@ Por mes (RMSE en MW; cobertura del 80 % de LightGBM sin y con CQR):
 
 Pruebas: `tests/leakage/test_backtest_folds.py` (también sobre la tabla real: primer pliegue 2024-10, último 2026-07, 22 pliegues, coherencia con `split_v01`), `tests/unit/test_features_gold.py::test_split_boundaries` y `tests/leakage/test_leakage_features.py` sobre la tabla nueva.
 
+### 8.5 Precio day-ahead de D: con y sin el bloque `price` (ejecución del 2026-10-23, tabla oro versión Delta 8)
+
+Prueba de #29 (ADR 0031) con la misma validación de 22 pliegues (64 224 filas, 669 días, oct 2024 – jul 2026); el periodo reservado no se ha evaluado. La tabla oro versión 8 añade 5 columnas `price_*` y `available_at_price` (`docs/f3-features.md` §9). Se repitió LightGBM y LightGBM + CQR con y sin ellas (`--param 'exclude_prefixes=["price_"]'`), sin tocar nada más.
+
+| Ejecución | RMSE Q50 (MW) | Winkler | Cobertura 80 % |
+|---|---|---|---|
+| `20261023T171003Z-lgbm-validation` (sin precio) | 1 060,8 | 3 450,6 | 71,2 % |
+| `20261023T171006Z-lgbm-validation` (con precio) | 1 054,3 | 3 446,6 | 71,3 % |
+| `20261023T171607Z-lgbm_cqr-validation` (sin precio) | 1 060,8 | 3 396,5 | 79,5 % |
+| `20261023T171611Z-lgbm_cqr-validation` (con precio) | 1 054,3 | 3 386,1 | 79,5 % |
+
+Las dos de «sin precio» reproducen bit a bit las de §8.4 (`20261023T163749Z-lgbm-validation`, `20261023T164140Z-lgbm_cqr-validation`), así que la tabla nueva no cambia nada si el bloque no entra.
+
+- **Total:** RMSE −0,6 %, Winkler −0,1 % (LightGBM) y −0,3 % (con CQR), cobertura igual. Mejoran 13 de los 22 pliegues en RMSE (12 en Winkler con CQR); la variación por pliegue va de −4,6 % a +2,4 %. Bootstrap por día: −0,61 %, intervalo del 95 % de −1,34 % a +0,11 %.
+- **Días con precio negativo.** Precio de D con horas negativas (17 284 filas): 1 176,5 → 1 166,9 MW (−0,8 %). Día objetivo con horas negativas (solo análisis; el precio de D+1 no es variable; 17 276 filas): 1 189,4 → 1 185,3 MW (−0,3 %). Sin horas negativas: 1 009,4 → 1 001,8 MW (−0,8 %). El bloque no ayuda más en los días de curtailment que en los demás; esos días son los de más error en los dos casos.
+- **Decisión:** no mejora de forma clara (dentro del ruido) → excluido del modelo por defecto (`models/lgbm.py::DEFAULT_EXCLUDE`). Las ejecuciones por defecto son las de siempre (`20261023T172307Z-lgbm-validation`, `20261023T172311Z-lgbm_cqr-validation`, mismas cifras que sin precio) y el scorecard las refleja; su `trend` compara con la ejecución con precio y dice «igual» (−0,6 %). Se activa con `--param 'exclude_prefixes=[]'`.
+
 ## 9. Limitaciones y no verificado
 
 - **Persistencia:** el margen de 180 min sale de una sola semana de medidas de octubre de 2026 (~40 observaciones: retraso normal de 30 a 62 min y un atasco de hasta 166 min el 22 de octubre); en otras épocas o con incidencias más largas de ENTSO-E podría ser mayor. Además, la generación histórica de la plata es la **última revisión**, no la que estaba publicada en el momento del cierre, así que el valor «último conocido» puede ser algo mejor que el real. Con el mismo cuidado hay que leer su RMSE.
@@ -304,7 +321,7 @@ Pruebas: `tests/leakage/test_backtest_folds.py` (también sobre la tabla real: p
 - **Holdout de verano-otoño con poco viento** (`y_cf` medio 0,184 frente a 0,189 en validación): no garantiza diciembre. La validación ahora tiene dos inviernos (2024/25 y 2025/26), pero los primeros pliegues siguen sin haber visto el mismo mes natural previo (por eso la climatología usa los meses vecinos ±1 y, si no hay, todo el entrenamiento) y el invierno 2024/25 se valida con solo 8 a 10 meses de entrenamiento: es donde LightGBM no gana a la curva de potencia (§8.4).
 - **Cobertura en meses sueltos** oscila entre 69 y 83 %: con ~2 900 filas por mes y autocorrelación fuerte, la banda 76–84 % del total es una condición sobre 8 meses, no una garantía por mes. La CQR (§8.2) lleva el total al 79,8 %, pero por mes sigue entre 63 y 91 %.
 - El **denominador** (`y_cap_mw`) usa MaStR con altas registradas a posteriori (`docs/f3-features.md` §11), igual para modelo y operador (el operador se compara en MW, sin conversión).
-- Las clasificaciones vigentes son las de §8.4 (tabla oro versión Delta 7, 936 cierres, 22 pliegues). Las de §8 a §8.3 (410 cierres) quedan como historial. Cada vez que cambie el histórico, los pliegues cambian y hay que repetir las ejecuciones. El periodo reservado ahora tiene más días con realidad (la tabla llega al cierre del 2026-10-23) que cuando se evaluó por última vez la v0.1: si se evalúa, el número de filas no será el de §3.
+- Las clasificaciones vigentes son las de §8.4 (tabla oro versión Delta 7; con la 8 de §8.5 las cifras del modelo por defecto son idénticas, 936 cierres, 22 pliegues). Las de §8 a §8.3 (410 cierres) quedan como historial. Cada vez que cambie el histórico, los pliegues cambian y hay que repetir las ejecuciones. El periodo reservado ahora tiene más días con realidad (la tabla llega al cierre del 2026-10-23) que cuando se evaluó por última vez la v0.1: si se evalúa, el número de filas no será el de §3.
 - El contador del holdout detecta mirar demasiado, no lo impide; las ejecuciones se pueden borrar a mano de `data/backtest/`, pero el registro `holdout_log.jsonl` es de solo añadir.
 - Pliegues de entrenamiento cortos al principio (182 días en el primero, 213 en el segundo): el error de oct y nov de 2024 es el de un modelo que solo ha visto primavera y verano, y esos dos meses no sirven para comparar con los siguientes. La media de todo el periodo los incluye (4 132 filas de las 64 224 en la racha ausente, 6,4 %).
 - **Racha ausente en los primeros 7 meses** (§8.4): la NaN nativa se ha comprobado con datos reales, pero el efecto de la racha sobre el error es menor que el ruido (±1 %), así que no se ha podido medir si ayuda; se repite tras Optuna.

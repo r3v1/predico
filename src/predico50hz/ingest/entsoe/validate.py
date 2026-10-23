@@ -63,6 +63,7 @@ def schema(dataset: str) -> pa.DataFrameSchema:
                 "price_eur_mwh": pa.Column(pl.Float64, _between("price_eur_mwh", *PRICE_RANGE)),
                 "resolution_min": pa.Column(pl.Int32, pa.Check.isin([15, 60])),
                 "fetched_at": pa.Column(UTC),
+                "first_seen_at": pa.Column(UTC),
             },
             checks=[unique],
             strict=True,

@@ -15,18 +15,20 @@ from polars.testing import assert_frame_equal
 
 import predico50hz.features as features_pkg
 from conftest import DATES, Synth
+from predico50hz.features import price as price_mod
 from predico50hz.features.build import build_gold
 from predico50hz.features.capacity import load_clusters
 from predico50hz.features.config import DEFAULT_GOLD
 from predico50hz.features.registry import (
     BLOCKS,
+    PRICE_FEATURES,
     TARGETS,
     Column,
     available_col,
     build_registry,
     feature_columns,
 )
-from predico50hz.features.timing import closure_utc
+from predico50hz.features.timing import closure_utc, price_bound, target_window
 from predico50hz.features.validate import schema_issues
 
 REPO = Path(__file__).resolve().parents[2]
@@ -75,6 +77,11 @@ def test_leakage_check_detects_a_violation(synth: Synth, registry: list[Column])
     assert any(
         i["check"] == "nwp_init_is_issue_day_00z" for i in schema_issues(registry, other_pass)
     )
+    late_price = df.with_columns(available_at_price=pl.col("closure_utc"))
+    assert any("available_at_price" in p for p in check_no_lookahead(late_price))
+    assert any(
+        i["check"] == "available_before_closure" for i in schema_issues(registry, late_price)
+    )
 
 
 @pytest.mark.data
@@ -103,8 +110,11 @@ def test_every_feature_has_an_availability_block(synth: Synth, registry: list[Co
 
 def test_forbidden_columns_are_never_features(registry: list[Column]) -> None:
     feats = feature_columns(registry)
-    forbidden = re.compile(r"^y_|^wind_.*_mw$|forecast|operator|operador|price|split_v01|^target_")
+    forbidden = re.compile(r"^y_|^wind_.*_mw$|forecast|operator|operador|split_v01|^target_")
     assert [f for f in feats if forbidden.search(f)] == []
+    # El precio solo entra como el bloque `price` (precio de D), siempre con prefijo `price_`.
+    assert [f for f in feats if "price" in f and f not in PRICE_FEATURES] == []
+    assert all(f.startswith("price_") for f in PRICE_FEATURES)
     assert set(feats).isdisjoint(TARGETS)
     assert set(feats).isdisjoint(
         {"y_cap_mw", "y_cap_land_mw", "y_cap_sea_mw", "split_v01", "ts_utc"}
@@ -168,16 +178,74 @@ def test_no_day_without_its_own_pass(synth: Synth) -> None:
 
 def test_features_package_never_references_operator_forecast_or_prices() -> None:
     pkg = Path(features_pkg.__file__).parent
-    banned_text = re.compile(
-        r"entsoe[/.](forecast|prices)|ingest\.entsoe|silver/entsoe/(forecast|prices)"
-    )
+    banned_text = re.compile(r"entsoe[/.]forecast|ingest\.entsoe|silver/entsoe/forecast")
     for f in sorted(pkg.glob("*.py")):
         src = f.read_text()
-        assert not banned_text.search(src), f"{f.name} referencia forecast/prices de ENTSO-E"
+        assert not banned_text.search(src), f"{f.name} referencia el pronóstico de ENTSO-E"
+        # La plata de precios solo se nombra en la configuración (ruta por defecto).
+        if f.name != "config.py":
+            assert "silver/entsoe/prices" not in src, f.name
         for node in ast.walk(ast.parse(src)):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 assert node.value not in {"forecast", "prices"}, f"{f.name}: dataset {node.value!r}"
-                assert not re.search(r"(^|/)(forecast|prices)(/|$)", node.value), f.name
+                assert not re.search(r"(^|/)forecast(/|$)", node.value), f.name
             if isinstance(node, ast.ImportFrom | ast.Import):
                 names = [getattr(node, "module", None) or "", *(a.name for a in node.names)]
                 assert not any("entsoe" in n for n in names), f"{f.name} importa ENTSO-E"
+
+
+def test_price_of_next_day_never_enters(synth: Synth, registry: list[Column]) -> None:
+    """Alterar o quitar los precios desde el día local D+1 no cambia ninguna variable de D."""
+    feats = ["ts_utc", *feature_columns(registry), "available_at_price"]
+    for d in DATES:
+        first_next = target_window(d)[0]  # primer instante del día local D+1
+        synth.write_prices()
+        base, _ = build_gold(synth.sources, d, d)
+        for shift in (500.0, -777.0):
+            synth.write_prices(shift_after=first_next, shift=shift)
+            changed, _ = build_gold(synth.sources, d, d)
+            assert_frame_equal(base.select(feats), changed.select(feats), check_exact=True)
+        # Sin ningún precio de D+1 en adelante tampoco cambia.
+        px = pl.read_delta(synth.sources.prices).filter(pl.col("ts_utc") < first_next)
+        px.write_delta(synth.sources.prices, mode="overwrite")
+        cut, _ = build_gold(synth.sources, d, d)
+        assert_frame_equal(base.select(feats), cut.select(feats), check_exact=True)
+
+
+def test_price_of_d_does_change_the_price_block(synth: Synth, registry: list[Column]) -> None:
+    d = DATES[1]
+    first_d = target_window(d - dt.timedelta(days=1))[0]  # primer instante del día local D
+    base, _ = build_gold(synth.sources, d, d)
+    synth.write_prices(shift_after=first_d, shift=40.0)
+    changed, _ = build_gold(synth.sources, d, d)
+    assert changed["price_mean"][0] == pytest.approx(base["price_mean"][0] + 40.0)
+    assert changed["price_min"][0] == pytest.approx(base["price_min"][0] + 40.0)
+    assert changed["price_range"][0] == pytest.approx(base["price_range"][0])
+    others = [c for c in feature_columns(registry) if not c.startswith("price_")]
+    assert_frame_equal(base.select(others), changed.select(others), check_exact=True)
+
+
+def test_available_at_price_is_before_closure_with_margin(synth: Synth) -> None:
+    df, _ = build_gold(synth.sources)
+    assert (df["available_at_price"] < df["closure_utc"]).all()
+    assert (df["closure_utc"] - df["available_at_price"]).min() >= dt.timedelta(hours=17)
+    for d in DATES:  # la cota prudente también con los cambios de hora (96, 92 y 100 pasos)
+        assert closure_utc(d) - price_bound(d) >= dt.timedelta(hours=17)
+
+
+def test_price_arriving_after_closure_is_not_used(synth: Synth) -> None:
+    """Un precio medido que llegó tras el cierre de D deja el día con NaN y `price_missing`."""
+    d = DATES[3]
+    px = pl.read_delta(synth.sources.prices)
+    late = closure_utc(d) + dt.timedelta(minutes=1)
+    lo, hi = price_mod.delivery_window(d)
+    px = px.with_columns(
+        first_seen_at=pl.when(pl.col("ts_utc").is_between(lo, hi, closed="left"))
+        .then(pl.lit(late).cast(pl.Datetime("us", "UTC")))
+        .otherwise(pl.col("first_seen_at"))
+    )
+    px.write_delta(synth.sources.prices, mode="overwrite")
+    df, _ = build_gold(synth.sources, d, d)
+    assert df["price_missing"].unique().to_list() == [1]
+    assert df.select(pl.col("price_mean").is_nan().all()).item()
+    assert (df["available_at_price"] < df["closure_utc"]).all()

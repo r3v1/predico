@@ -26,6 +26,7 @@ from predico50hz.features.registry import (
     available_col,
     build_registry,
     is_gust,
+    is_price,
 )
 
 DT_UTC = pl.Datetime("us", "UTC")
@@ -45,6 +46,10 @@ RANGES: list[tuple[str, float, float]] = [
     (r"t2m_", -40.0, 45.0),
     (r"gustfac_", 0.0, 10.0),
     (r"gust_missing$", 0.0, 1.0),
+    (r"price_missing$", 0.0, 1.0),
+    (r"price_neg_hours$", 0.0, 25.0),
+    (r"price_range$", 0.0, 5000.0),
+    (r"price_(min|mean)$", -600.0, 4000.0),
     (r"gust_", 0.0, 80.0),
     (r"wdir100_", -1.0 - 1e-9, 1.0 + 1e-9),
     (r"(u100|v100)_", -70.0, 70.0),
@@ -88,6 +93,12 @@ def _feature_column(name: str, dtype: Any) -> pa.Column:
             | (pl.col(name).is_between(lo, hi) & (pl.col("gust_missing") == 0))
         )
         return pa.Column(dtype, _chk("range_or_missing_gust", ok), nullable=True)
+    if is_price(name):
+        ok = lambda d: d.lazyframe.select(  # noqa: E731
+            (pl.col(name).is_nan() & (pl.col("price_missing") == 1))
+            | (pl.col(name).is_between(lo, hi) & (pl.col("price_missing") == 0))
+        )
+        return pa.Column(dtype, _chk("range_or_missing_price", ok), nullable=True)
     return pa.Column(dtype, pa.Check.in_range(lo, hi, include_min=True, include_max=True))
 
 
@@ -110,7 +121,7 @@ def schema(reg: list[Column]) -> pa.DataFrameSchema:
         "capacity_ffilled": pl.Boolean,
         "split_v01": pl.String,
     }
-    int_features = {"gust_missing", "dow", "month", "is_weekend", "is_dst"}
+    int_features = {"gust_missing", "price_missing", "dow", "month", "is_weekend", "is_dst"}
     cols: dict[str, pa.Column] = {}
     for c in reg:
         if c.role == "meta":
@@ -245,6 +256,9 @@ def build_report(df: pl.DataFrame, reg: list[Column]) -> dict[str, Any]:
     margin = df.select(
         (pl.col("closure_utc") - pl.col("available_at_nwp")).dt.total_minutes().min()
     ).item()
+    margin_price = df.select(
+        (pl.col("closure_utc") - pl.col("available_at_price")).dt.total_minutes().min()
+    ).item()
     by_split = (
         df.group_by("split_v01")
         .agg(
@@ -269,6 +283,10 @@ def build_report(df: pl.DataFrame, reg: list[Column]) -> dict[str, Any]:
         ][:MAX_LISTED],
         "n_incomplete_target_days": incomplete.height,
         "min_margin_nwp_to_closure_min": margin,
+        "min_margin_price_to_closure_min": margin_price,
+        "price_missing_days": int(
+            df.filter(pl.col("price_missing") == 1)["forecast_issue_date"].n_unique()
+        ),
         "by_split": [
             {"split": s, "days": int(d), "rows": int(r), "y_cf_mean": m}
             for s, d, r, m in by_split.iter_rows()

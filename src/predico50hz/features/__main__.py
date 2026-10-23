@@ -21,6 +21,7 @@ from predico50hz.features.config import (
     DEFAULT_GENERATION,
     DEFAULT_GOLD,
     DEFAULT_NWP,
+    DEFAULT_PRICES,
     DEFAULT_VALIDATION,
 )
 from predico50hz.features.validate import validate
@@ -46,11 +47,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cap-cluster", default=DEFAULT_CAP_CLUSTER)
     ap.add_argument("--cap-total", default=DEFAULT_CAP_TOTAL)
     ap.add_argument("--centroids", default=DEFAULT_CENTROIDS)
+    ap.add_argument("--prices", default=DEFAULT_PRICES)
     args = ap.parse_args(argv)
 
     gold = Path(args.gold)
     if not args.validate_only:
-        src = Sources(args.nwp, args.generation, args.cap_cluster, args.cap_total, args.centroids)
+        src = Sources(
+            args.nwp,
+            args.generation,
+            args.cap_cluster,
+            args.cap_total,
+            args.centroids,
+            args.prices,
+        )
         t0 = time.perf_counter()
         df, info = build_gold(src, args.start, args.end)
         if df.is_empty():

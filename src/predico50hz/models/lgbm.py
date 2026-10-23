@@ -13,6 +13,9 @@ cambio de un número de árboles honesto por cuantil.
 
 **Variables.** Toda columna numérica que no sea meta (`features.registry.META`), objetivo
 (`y_*`) ni disponibilidad (`available_at_*`). Los NaN (rachas ausentes) los trata LightGBM.
+El bloque `price` (precio day-ahead de D, columnas `price_*`) está construido pero **excluido por
+defecto** (`DEFAULT_EXCLUDE`): en validación mejoró solo un 0,6 % y no de forma clara
+(`docs/f3-features.md` §9). Se activa con `exclude_prefixes=[]`.
 """
 
 import datetime as dt
@@ -28,6 +31,8 @@ from predico50hz.models.cqr import MIN_DAYS, PUBLICATION_DELAY, WINDOW_DAYS, CQR
 
 QUANTILES: dict[str, float] = {"q10": 0.1, "q50": 0.5, "q90": 0.9}
 EXCLUDED = {*META, *TARGETS}
+# Bloques de variables fuera del modelo por defecto (ablación, ADR 0031 y #29).
+DEFAULT_EXCLUDE: tuple[str, ...] = ("price_",)
 
 
 def feature_columns(df: pl.DataFrame, exclude_prefixes: tuple[str, ...] = ()) -> list[str]:
@@ -95,7 +100,9 @@ class LightGBM(Model):
             "es_fraction": es_fraction,
             "es_min_days": es_min_days,
             "seed": seed,
-            "exclude_prefixes": list(exclude_prefixes or []),
+            "exclude_prefixes": list(
+                DEFAULT_EXCLUDE if exclude_prefixes is None else exclude_prefixes
+            ),
         }
         self._cols: list[str] = []
         self._boosters: dict[str, lgb.Booster] = {}

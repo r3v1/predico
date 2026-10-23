@@ -13,6 +13,7 @@ from predico50hz.features.config import (
     CLOSURE_LOCAL,
     NWP_INIT_HOUR,
     NWP_LATENCY,
+    PRICE_BOUND,
     STEP,
     UTC,
 )
@@ -58,3 +59,8 @@ def available_at_capacity(d: dt.date) -> dt.datetime:
 def available_at_calendar(d: dt.date) -> dt.datetime:
     """Calendario: determinista, disponible desde las 00:00 UTC de `d`."""
     return dt.datetime.combine(d, dt.time(0, 0), tzinfo=UTC) + CALENDAR_LATENCY
+
+
+def price_bound(d: dt.date) -> dt.datetime:
+    """Cota prudente de la disponibilidad del precio de `d`: cierre de `d`-1 más 6 h."""
+    return closure_utc(d - dt.timedelta(days=1)) + PRICE_BOUND

@@ -109,6 +109,44 @@ class Synth:
             df = df.filter(pl.col("ts_utc") < hole_after)
         df.write_delta(str(self.root / "generation"), mode="overwrite")
 
+    def write_prices(self, shift_after: dt.datetime | None = None, shift: float = 0.0) -> None:
+        """Precios sintéticos: horarios hasta 2025-12-31 y de 15 min después, con valores negativos.
+
+        `first_seen_at` = 12:00 UTC de la víspera de la fecha UTC (los de antes del 2025-10-22
+        quedan como primera descarga: censurados). `shift` se suma a las filas desde `shift_after`.
+        """
+        a, b = dt.datetime(2025, 10, 20, tzinfo=dt.UTC), dt.datetime(2026, 7, 14, tzinfo=dt.UTC)
+        cut = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+        first = dt.datetime(2025, 10, 21, 12, tzinfo=dt.UTC)
+        hourly = pl.datetime_range(a, cut, "1h", time_zone="UTC", time_unit="us", eager=True)
+        quarter = pl.datetime_range(
+            cut, b, "15m", time_zone="UTC", time_unit="us", closed="right", eager=True
+        )
+        frames = [
+            pl.DataFrame({"ts_utc": hourly[:-1]}).with_columns(resolution_min=pl.lit(60, pl.Int32)),
+            pl.DataFrame({"ts_utc": quarter}).with_columns(resolution_min=pl.lit(15, pl.Int32)),
+        ]
+        df = pl.concat(frames)
+        n = df.height
+        price = 40.0 + 60.0 * np.sin(np.arange(n) / 37.0) + 25.0 * np.cos(np.arange(n) / 5.0)
+        df = df.with_columns(
+            price_eur_mwh=pl.Series(np.round(price, 2)),
+            day=pl.col("ts_utc").dt.truncate("1d"),
+        ).with_columns(
+            fetched_at=pl.lit(first).cast(pl.Datetime("us", "UTC")),
+            first_seen_at=pl.max_horizontal(
+                pl.lit(first).cast(pl.Datetime("us", "UTC")),
+                pl.col("day") - pl.duration(hours=12),
+            ),
+        )
+        if shift_after is not None:
+            df = df.with_columns(
+                price_eur_mwh=pl.when(pl.col("ts_utc") >= shift_after)
+                .then(pl.col("price_eur_mwh") + shift)
+                .otherwise(pl.col("price_eur_mwh"))
+            )
+        df.drop("day").write_delta(str(self.root / "prices"), mode="overwrite")
+
     def write_operator_forecast(self) -> None:
         ts = pl.datetime_range(
             dt.datetime(2025, 10, 20, tzinfo=dt.UTC),
@@ -172,9 +210,11 @@ def synth(tmp_path: Path) -> Synth:
             cap_cluster=str(root / "cap_cluster"),
             cap_total=str(root / "cap_total"),
             centroids=str(root / "centroids.yaml"),
+            prices=str(root / "prices"),
         ),
     )
     for d in DATES:
         s.write_pass(d)
     s.write_generation()
+    s.write_prices()
     return s

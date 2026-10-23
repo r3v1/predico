@@ -131,11 +131,17 @@ def build_generation(points: pl.DataFrame) -> pl.DataFrame:
 
 def build_prices(points: pl.DataFrame) -> pl.DataFrame:
     pts = points.filter(pl.col("sequence").is_null() | (pl.col("sequence") == 1))
-    return latest(pts, ["ts_utc"]).select(
-        "ts_utc",
-        pl.col("value").alias("price_eur_mwh"),
-        "resolution_min",
-        "fetched_at",
+    first_seen = pts.group_by("ts_utc").agg(first_seen_at=pl.col("fetched_at").min())
+    return (
+        latest(pts, ["ts_utc"])
+        .join(first_seen, on="ts_utc")
+        .select(
+            "ts_utc",
+            pl.col("value").alias("price_eur_mwh"),
+            "resolution_min",
+            "fetched_at",
+            "first_seen_at",
+        )
     )
 
 

@@ -92,7 +92,7 @@ flowchart TD
     CLUST --> CAP
     ENTSOE --> GEN & CAP & PRICE & OPF
     VAL --> FEAT
-    PRICE -.->|D+1 llega tras el cierre (ADR 0031):<br/>fuera; el de D, candidato (issue 29)| FEAT
+    PRICE -.->|solo el de D (ADR 0031),<br/>excluido del modelo por defecto| FEAT
     CLUST --> FEAT
     GEN --> TARGET
     CAP --> TARGET
@@ -211,7 +211,7 @@ uv run python -m predico50hz.features --validate-only
 - **Cobertura:** 936 cierres, del 1 abr 2024 al día de hoy; antes del 13 nov 2024 la racha es NaN con `gust_missing` = 1.
 - **Una fila por intervalo de 15 min del día objetivo** (día local D+1: 96 pasos, 92 o 100 en los cambios de hora) y por `forecast_issue_date` D (día del cierre, 15:00 de Berlín = 13:00 UTC en verano y 14:00 UTC en invierno).
 - **Variables** (239): viento a 100 m por clúster (ctrl, media, cuantiles, dispersión), agregados ponderados por la capacidad MaStR de la fecha (v³, buje a 119/104 m, cizalladura, densidad, estabilidad, racha, dirección, dispersión espacial), capacidad, calendario local y plazo.
-- **Objetivo** `y_*`: generación en MW y factor de capacidad con la capacidad MaStR del día. El pronóstico del operador (publicado hacia las 17:00 UTC, 4 h después del cierre) y el precio no entran: el de D+1 solo estuvo antes del cierre la mitad de los días (ADR 0031, `docs/f2-entsoe.md` §3).
+- **Objetivo** `y_*`: generación en MW y factor de capacidad con la capacidad MaStR del día. El pronóstico del operador (publicado hacia las 17:00 UTC, 4 h después del cierre) no entra. El precio de D+1 tampoco: solo estuvo antes del cierre la mitad de los días (ADR 0031, `docs/f2-entsoe.md` §3). El del día del cierre (D) está en el bloque `price_*`, pero LightGBM lo excluye por defecto: mejora el RMSE un 0,6 %, dentro del ruido (#29, `docs/f3-features.md` §9).
 - **Look-ahead:** cada bloque lleva su `available_at_*`; `tests/leakage/` falla si alguno es ≥ el cierre. Validación Pandera en `data/validation/gold_features.json`.
 - Detalle en `docs/f3-features.md`.
 

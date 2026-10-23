@@ -12,6 +12,7 @@ DEFAULT_GENERATION = "data/silver/entsoe/generation"
 DEFAULT_CAP_CLUSTER = "data/silver/mastr/capacity_cluster"
 DEFAULT_CAP_TOTAL = "data/silver/mastr/capacity_total"
 DEFAULT_CENTROIDS = "config/centroids.yaml"
+DEFAULT_PRICES = "data/silver/entsoe/prices"
 DEFAULT_GOLD = "data/gold/features"
 DEFAULT_VALIDATION = "data/validation"
 
@@ -27,6 +28,9 @@ NWP_LATENCY = dt.timedelta(hours=8, minutes=30)
 # La capacidad y el calendario de D se consideran conocidos desde las 00:00 UTC de D.
 CAPACITY_LATENCY = dt.timedelta(0)
 CALENDAR_LATENCY = dt.timedelta(0)
+# El precio de D se publica la víspera. Cota prudente de su disponibilidad: el cierre de D-1 más el
+# peor retraso medido (6 h; `docs/f2-entsoe.md` §3, ADR 0031). Es siempre anterior al cierre de D.
+PRICE_BOUND = dt.timedelta(hours=6)
 
 # Altura de buje (m) ponderada por potencia, MaStR (docs/f2.6-mastr.md §8).
 HUB_HEIGHT_M = {"land": 119.0, "sea": 104.0}

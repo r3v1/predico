@@ -1,6 +1,6 @@
 """Registro explícito de columnas de la tabla oro: cada una es `meta`, `feature` o `target`.
 
-Cada `feature` pertenece a un bloque (`nwp`, `capacity`, `calendar`) y cada bloque tiene su
+Cada `feature` pertenece a un bloque (`nwp`, `capacity`, `calendar`, `price`) y cada bloque tiene su
 columna `available_at_<bloque>` (meta). Las variables agregadas por capacidad llevan el bloque
 `nwp`: dependen también de los pesos de capacidad, pero su disponibilidad (D 00:00 UTC) es
 anterior a la de la pasada NWP, así que `available_at_nwp` es el máximo de ambas. Nada de la
@@ -14,7 +14,7 @@ from predico50hz.features.capacity import Cluster
 from predico50hz.features.config import GROUPS
 
 Role = Literal["meta", "feature", "target"]
-BLOCKS = ("nwp", "capacity", "calendar")
+BLOCKS = ("nwp", "capacity", "calendar", "price")
 CLUSTER_STATS = ("ctrl", "mean", "p10", "p50", "p90", "std")
 
 KEY = ("forecast_issue_date", "ts_utc")
@@ -27,6 +27,7 @@ META = (
     "available_at_nwp",
     "available_at_capacity",
     "available_at_calendar",
+    "available_at_price",
     "n_steps_day",
     "capacity_ffilled",
     "split_v01",
@@ -84,6 +85,10 @@ CALENDAR_FEATURES = (
     "is_dst",
     "step_of_day",
 )
+# Bloque `price`: precio day-ahead de D (el día del cierre), no el de D+1 (ADR 0031). Todas las
+# columnas con este prefijo se pueden quitar del modelo con `exclude_prefixes=["price_"]`.
+PRICE_PREFIX = "price_"
+PRICE_FEATURES = ("price_neg_hours", "price_min", "price_mean", "price_range", "price_missing")
 # Columnas que valen NaN cuando la plata NWP no trae racha (`gust_missing` = 1).
 GUST_PREFIXES = ("gust_", "gustfac_")
 
@@ -114,6 +119,7 @@ def build_registry(clusters: list[Cluster]) -> list[Column]:
     cols += [Column(n, "feature", "nwp") for n in nwp_columns(clusters)]
     cols += [Column(n, "feature", "capacity") for n in CAPACITY_FEATURES]
     cols += [Column(n, "feature", "calendar") for n in CALENDAR_FEATURES]
+    cols += [Column(n, "feature", "price") for n in PRICE_FEATURES]
     cols += [Column(t, "target") for t in TARGETS]
     names = [c.name for c in cols]
     if len(set(names)) != len(names):
@@ -128,3 +134,8 @@ def feature_columns(reg: list[Column]) -> list[str]:
 def is_gust(name: str) -> bool:
     """`True` si la columna vale NaN cuando falta la racha."""
     return name.startswith(GUST_PREFIXES) and name != "gust_missing"
+
+
+def is_price(name: str) -> bool:
+    """`True` si la columna vale NaN cuando falta el precio de D."""
+    return name.startswith(PRICE_PREFIX) and name != "price_missing"

@@ -2,6 +2,15 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.14"
+    date: 2026-10-23
+    title: El precio del día del cierre apenas ayuda
+    items:
+      - "Se ha probado el precio de la electricidad del día en que se cierra la previsión, que se publica la víspera y siempre llega a tiempo. Se resume en cuatro datos: horas con precio negativo, mínimo, media y diferencia entre el más alto y el más bajo."
+      - "Con ese precio el error del modelo baja un 0,6 %: de 1.061 a 1.054 MW. En 13 de los 22 meses evaluados mejora y en 9 empeora, y repitiendo el cálculo con otros días el resultado puede no ser mejora. Es demasiado poco para fiarse."
+      - "Los días con precio negativo, que son los de más error, tampoco mejoran más que los demás."
+      - "Por eso el modelo no lo usa por ahora. El dato queda guardado y comprobado, y se podrá activar más adelante si compensa."
+      - "No se usa el precio del día siguiente: llega tarde la mitad de los días. Una prueba automática falla si alguno se cuela."
   - version: "0.13"
     date: 2026-10-23
     title: La prueba se repite con los 30 meses de historia

@@ -1,8 +1,8 @@
 """Construcción de la tabla oro de variables: una fila por (`forecast_issue_date`, `ts_utc`).
 
-Cada día D usa SOLO la pasada NWP 00Z de D, la capacidad MaStR de la fecha D (pesos) y el
-calendario; la generación solo alimenta las columnas `y_*` (`target.py`). Nunca se lee el
-pronóstico del operador ni el precio.
+Cada día D usa SOLO la pasada NWP 00Z de D, la capacidad MaStR de la fecha D (pesos), el
+calendario y el precio day-ahead de D (no el de D+1; `price.py`); la generación solo alimenta las
+columnas `y_*` (`target.py`). Nunca se lee el pronóstico del operador.
 """
 
 import datetime as dt
@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from predico50hz.features import nwp, timing
+from predico50hz.features import nwp, price, timing
 from predico50hz.features.calendar import calendar_exprs
 from predico50hz.features.capacity import (
     Cluster,
@@ -28,6 +28,7 @@ from predico50hz.features.config import (
     DEFAULT_CENTROIDS,
     DEFAULT_GENERATION,
     DEFAULT_NWP,
+    DEFAULT_PRICES,
     SPLIT_UNUSED,
     SPLITS,
     STEP,
@@ -48,6 +49,7 @@ class Sources:
     cap_cluster: str = DEFAULT_CAP_CLUSTER
     cap_total: str = DEFAULT_CAP_TOTAL
     centroids: str = DEFAULT_CENTROIDS
+    prices: str = DEFAULT_PRICES
 
 
 def split_expr(col: str = "target_date") -> pl.Expr:
@@ -65,11 +67,13 @@ def build_day(  # noqa: PLR0913, PLR0917
     cap_cluster: pl.DataFrame,
     cap_total: pl.DataFrame,
     generation: pl.DataFrame | None,
+    prices: pl.DataFrame,
+    first_fetch: dt.datetime,
 ) -> pl.DataFrame:
     """Filas de la tabla oro del cierre `d` (96, 92 o 100) con meta, variables y objetivo.
 
-    Las variables solo usan `pass_df` (pasada 00Z de `d`), la capacidad de la fecha `d` y el
-    calendario; `generation` solo entra en las columnas `y_*`.
+    Las variables solo usan `pass_df` (pasada 00Z de `d`), la capacidad de la fecha `d`, el
+    calendario y el precio del día local `d`; `generation` solo entra en las columnas `y_*`.
     """
     grid = timing.target_grid(d)
     n = len(grid)
@@ -88,6 +92,9 @@ def build_day(  # noqa: PLR0913, PLR0917
         gen = generation.filter(
             (pl.col("ts_utc") >= grid[0]) & (pl.col("ts_utc") < grid[-1] + STEP)
         )
+    px = price.day_price(prices, d, first_fetch)
+    for k, v in px.features.items():
+        feats[k] = np.full(n, v)
     tgt = build_target(ts, gen, cap_total)
     meta = ts.with_columns(
         forecast_issue_date=pl.lit(d),
@@ -97,6 +104,7 @@ def build_day(  # noqa: PLR0913, PLR0917
         available_at_nwp=pl.lit(timing.available_at_nwp(d)).cast(DT_UTC),
         available_at_capacity=pl.lit(timing.available_at_capacity(d)).cast(DT_UTC),
         available_at_calendar=pl.lit(timing.available_at_calendar(d)).cast(DT_UTC),
+        available_at_price=pl.lit(px.available_at).cast(DT_UTC),
         n_steps_day=pl.lit(n, pl.Int16),
         capacity_ffilled=tgt.get_column("capacity_ffilled") | pl.lit(cap.ffilled),
     ).with_columns(split_expr())
@@ -104,7 +112,10 @@ def build_day(  # noqa: PLR0913, PLR0917
     return pl.concat(
         [
             meta,
-            pl.DataFrame(feats).with_columns(gust_missing=pl.Series(gust_missing)),
+            pl.DataFrame(feats).with_columns(
+                gust_missing=pl.Series(gust_missing),
+                price_missing=pl.Series(np.full(n, int(px.missing), dtype=np.int8)),
+            ),
             calendar,
             tgt.drop("ts_utc", "capacity_ffilled"),
         ],
@@ -133,12 +144,18 @@ def build_gold(
     cap_cluster = read_cluster_capacity(src.cap_cluster)
     cap_total = read_capacity_total(src.cap_total)
     generation = read_generation(src.generation)
+    prices = price.read_prices(src.prices)
+    first_fetch = price.first_fetch_time(prices)
     t0 = time.perf_counter()
     frames: list[pl.DataFrame] = []
     for d in dates:
         pass_df = nwp.read_pass(root, d, ids)
         if pass_df is not None:
-            frames.append(build_day(d, pass_df, clusters, cap_cluster, cap_total, generation))
+            frames.append(
+                build_day(
+                    d, pass_df, clusters, cap_cluster, cap_total, generation, prices, first_fetch
+                )
+            )
     if not frames:
         return pl.DataFrame(), {"passes": 0, "seconds": 0.0}
     df = pl.concat(frames).sort(KEY)

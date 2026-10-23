@@ -92,7 +92,7 @@ flowchart TD
     CLUST --> CAP
     ENTSOE --> GEN & CAP & PRICE & OPF
     VAL --> FEAT
-    PRICE -.->|sin hora de publicación medida:<br/>fuera de la v0.1| FEAT
+    PRICE -.->|D+1 llega tras el cierre (ADR 0031):<br/>fuera; el de D, candidato (issue 29)| FEAT
     CLUST --> FEAT
     GEN --> TARGET
     CAP --> TARGET
@@ -210,7 +210,7 @@ uv run python -m predico50hz.features --validate-only
 
 - **Una fila por intervalo de 15 min del día objetivo** (día local D+1: 96 pasos, 92 o 100 en los cambios de hora) y por `forecast_issue_date` D (día del cierre, 15:00 de Berlín = 13:00 UTC en verano y 14:00 UTC en invierno).
 - **Variables** (239): viento a 100 m por clúster (ctrl, media, cuantiles, dispersión), agregados ponderados por la capacidad MaStR de la fecha (v³, buje a 119/104 m, cizalladura, densidad, estabilidad, racha, dirección, dispersión espacial), capacidad, calendario local y plazo.
-- **Objetivo** `y_*`: generación en MW y factor de capacidad con la capacidad MaStR del día. El pronóstico del operador y el precio no entran.
+- **Objetivo** `y_*`: generación en MW y factor de capacidad con la capacidad MaStR del día. El pronóstico del operador (publicado hacia las 17:00 UTC, 4 h después del cierre) y el precio no entran: el de D+1 solo estuvo antes del cierre la mitad de los días (ADR 0031, `docs/f2-entsoe.md` §3).
 - **Look-ahead:** cada bloque lleva su `available_at_*`; `tests/leakage/` falla si alguno es ≥ el cierre. Validación Pandera en `data/validation/gold_features.json`.
 - Detalle en `docs/f3-features.md`.
 

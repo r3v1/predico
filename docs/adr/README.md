@@ -36,6 +36,7 @@ Las tareas pendientes están en los [issues](https://github.com/r3v1/predico/iss
 | [0028](0028-calidad-de-codigo-y-ci.md) | Calidad de código, hooks de pre-commit e integración continua | aceptada |
 | [0029](0029-experimentos-y-versionado-del-modelo.md) | Trazabilidad de experimentos y versionado semántico del modelo | aceptada |
 | [0030](0030-persistencia-con-margen-de-publicacion.md) | Persistencia con un margen de publicación de 180 min | aceptada |
+| [0031](0031-precio-day-ahead-solo-del-dia-del-cierre.md) | Precio day-ahead: el de D+1 no entra; el de D, como candidato | aceptada |
 
 ## Plantilla
 

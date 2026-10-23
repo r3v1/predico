@@ -62,7 +62,7 @@ Lo que sí hay son valores **omitidos por la propia API** (`curveType` A03: "blo
 
 **`createdDateTime` no es la hora de publicación.** Es la hora en que ENTSO-E genera la *respuesta* a la consulta: en las 284 ventanas descargadas (2015 a 2026) vale entre 2 s y 20 min después del arranque de la descarga, es decir, la hora de la propia petición, también para datos de 2015. `revisionNumber` vale **3 en el 100 % de los documentos** del pronóstico, de modo que tampoco discrimina. Se guardan ambos (`doc_created`, `doc_revision`) para que quede constancia, pero no sirven para fijar la disponibilidad ni para el test anti look-ahead (ADR 0009).
 
-**Lo único medible es la primera vez que se ve un valor** (`first_seen_at` en plata = mínimo `fetched_at` del bronce en que aparece la clave). Por ahora hay una sola descarga completa, así que todo vale 2026-10-16 12:56 UTC. Medición puntual: a las **13:20 UTC (15:20 CEST) del 16 de octubre el pronóstico day-ahead del día siguiente aún no existía** (el último valor era 2026-10-16 21:45 UTC, y la API sí tenía los precios del 17). Con el cierre a las 13:00 UTC en verano o 14:00 UTC en invierno, **el pronóstico del operador no está disponible antes del cierre**: solo sirve como benchmark, nunca como variable (coherente con el ADR 0017). Para fijar la hora real hay que ejecutar `--dataset forecast --days 2` **cada hora** (cron o timer) durante unas semanas; el `first_seen_at` resultante tendrá resolución horaria. Limitación: se mide cuándo lo vimos nosotros, no cuándo lo publicó el TSO (cota superior), y para el histórico anterior a la primera descarga no hay ningún dato.
+**Lo único medible es la primera vez que se ve un valor** (`first_seen_at` en plata = mínimo `fetched_at` del bronce en que aparece la clave). Al principio hubo una sola descarga completa, así que todo valía 2026-10-16 12:56 UTC. Desde entonces la VM descarga cada hora y la serie del 15 al 23 oct ya está medida (bloque final de esta sección). Medición puntual: a las **13:20 UTC (15:20 CEST) del 16 de octubre el pronóstico day-ahead del día siguiente aún no existía** (el último valor era 2026-10-16 21:45 UTC, y la API sí tenía los precios del 17). Con el cierre a las 13:00 UTC en verano o 14:00 UTC en invierno, **el pronóstico del operador no está disponible antes del cierre**: solo sirve como benchmark, nunca como variable (coherente con el ADR 0017). Para fijar la hora real hay que ejecutar `--dataset forecast --days 2` **cada hora** (cron o timer) durante unas semanas; el `first_seen_at` resultante tendrá resolución horaria. Esa medición ya corre en la VM (resultado en el bloque final). Limitación: se mide cuándo lo vimos nosotros, no cuándo lo publicó el TSO (cota superior), y para el histórico anterior a la primera descarga no hay ningún dato.
 
 **Generación real publicada antes del cierre (#11).** Cada ejecución de `entsoe-hourly` consulta además la generación real (A75/A16) de B18 y B19 de las últimas 36 h y anota en `data/ops/generation_lag.jsonl` la observación `(observed_at, last_step)`; `last_step` es el inicio del último cuarto de hora con dato en ambos tipos (el menor de los dos; los puntos rellenados por arrastre no cuentan). La consulta no hace fallar el job: si falla, queda en `details.generation_error` de `runs.jsonl`. `publication-times` añade a `publication_times.json` el bloque `generation_lag`: retraso `observed_at − last_step` (mediana y peor caso) y, por día de cierre, `cierre − last_step` según la última observación anterior al cierre (15:00 de Berlín; se descartan las de más de 90 min antes). Es el dato que fija hasta qué cuarto de hora puede apoyarse la persistencia de F5. Prueba puntual del 2026-10-21: a las 06:25 UTC el último cuarto de hora publicado empezaba a las 05:45 UTC (unos 40 min). Además, `publication-times` reconstruye observaciones equivalentes a partir del bronce de generación: cada carpeta `fetched_at=` cuya ventana llega hasta el día de la descarga da `observed_at = fetched_at` (`observations_from_bronze`). Si coinciden en el minuto, gana la consulta (`merge_observations`), y cada observación lleva `source` (`probe` o `bronze`). El bloque añade `n_by_source` y `near_closure`, con las observaciones de las 2 h previas al cierre de su día.
 
@@ -79,6 +79,34 @@ Lo que sí hay son valores **omitidos por la propia API** (`curveType` A03: "blo
 - **`at_closure` exagera unos 60 min**, porque la consulta horaria de las 13:00 UTC llega justo después del cierre: se usa la de las 12:00 (21 oct: 90 min; 22 oct: 120 min; 16 oct, con la descarga de las 12:53: 45 min). Una consulta extra unos minutos antes del cierre la afinaría.
 - **Decisión para la persistencia (F5, `docs/f4-backtest.md` §8.3): margen de 180 min.** Solo se usan cuartos de hora que empiezan como muy tarde a `cierre − 180 min`. Cubre un atasco como el del 22 oct y, con horizontes de 10 a 34 h, apenas cuesta error.
 - **Limitación:** es una semana de octubre y la resolución de las consultas es horaria. La medición sigue corriendo en la VM, y si aparece un retraso mayor habrá que revisar el margen.
+
+**Precio y pronóstico del operador, cierres del 15 al 23 oct 2026 (#10, datos de la VM).** Las horas son UTC y la resolución es horaria: cada hora se anota la primera descarga que ve el dato completo, así que la hora medida es una cota superior. El cierre de Predico fue a las 13:00 UTC (15:00 de Berlín, horario de verano). El margen es el cierre menos la hora medida; si es negativo, el dato llegó después del cierre.
+
+| Cierre (día D) | Objetivo (D+1) | Precio D+1: primera vez visto | Margen (min) | Pronóstico operador: primera vez visto | Margen (min) |
+|---|---|---|---|---|---|
+| 15 oct | 16 oct | censurado | — | censurado | — |
+| 16 oct | 17 oct | censurado | — | censurado | — |
+| 17 oct | 18 oct | 12:00 | +60 | 17:00 | −240 |
+| 18 oct | 19 oct | 13:00 | −0 | 17:00 | −240 |
+| 19 oct | 20 oct | 12:00 | +60 | 17:00 | −240 |
+| 20 oct | 21 oct | 19:00 | −360 | 17:00 | −240 |
+| 21 oct | 22 oct | 12:00 | +60 | 17:00 | −240 |
+| 22 oct | 23 oct | 13:00 | −0 | 17:00 | −240 |
+| 23 oct | 24 oct | sin publicar | — | sin publicar | — |
+
+**Resumen.**
+
+- **Precio (6 medidos):** primera vez visto entre las 12:00 y las 19:00 UTC, mediana 12:30. Antes del cierre, 3 de 6 (50 %). Margen mediano +30 min; peor caso −360 min (20 oct).
+- **Pronóstico del operador (6 medidos, 17–22 oct):** todos a las 17:00 UTC (entre 17:00:19 y 17:00:32), margen −240 min. Antes del cierre, 0 %.
+- **Generación real (#11):** 36 observaciones (8 del bronce, 28 consultas). Retraso mediano 31 min y peor caso 166 min. En las 2 h previas al cierre (3 observaciones), mediana 32 min y peor caso 61 min. Coincide con lo anterior: el margen de 180 min no cambia.
+
+**Conclusiones.**
+
+- El pronóstico del operador llega siempre hacia las 17:00 UTC, cuatro horas después del cierre. Solo sirve como referencia (ADR 0017).
+- El precio de D+1 estuvo publicado antes del cierre en 3 de 6 días, y el 20 oct llegó a las 19:00 UTC. Con la regla del ADR 0009 (solo entra lo que llega antes del cierre en el peor caso medido), no entra como variable. La decisión está en el ADR 0031 (#12).
+- El precio de D, publicado la víspera, sí está siempre antes del cierre.
+
+**Limitación.** Es una semana de octubre con resolución horaria. Los días 18 y 22 «−0 min» significan que a las 12:00 UTC aún no estaba y se vio en la descarga de las 13:00, justo después del cierre. Los días 15 y 16 no tienen una descarga anterior que los viera incompletos, así que no entran en el resumen. El 23 oct aún no estaba publicado en la última descarga copiada.
 
 ## 4. Comprobación de coherencia
 

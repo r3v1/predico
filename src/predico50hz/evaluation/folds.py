@@ -8,7 +8,7 @@ Todo se decide por `target_date` (el día del que se pronostica), no por `foreca
   de desarrollo con `target_date` **estrictamente anterior** al primer día del mes (ventana
   creciente).
 - El primer pliegue empieza cuando hay al menos `min_train_months` meses naturales completos de
-  entrenamiento previo (por defecto 3).
+  entrenamiento previo (por defecto 6).
 - La evaluación del periodo reservado es un único «pliegue» especial: entrena con todo el
   desarrollo y valida en el holdout (modo explícito `--holdout`, que queda registrado).
 """
@@ -22,7 +22,10 @@ import polars as pl
 DEV_SPLITS = ("train", "valid")
 HOLDOUT_SPLIT = "holdout"
 HOLDOUT_FOLD = -1
-DEFAULT_MIN_TRAIN_MONTHS = 3
+# 6 meses: con el histórico completo (desde abr 2024) el primer pliegue valida octubre de 2024 y los
+# de diciembre y enero ya entrenan con 8 y 9 meses (con 3 entrenaban con 90 días). Debe coincidir
+# con el fin de `train` en `features.config.SPLITS` (lo comprueba un test).
+DEFAULT_MIN_TRAIN_MONTHS = 6
 
 
 @dataclass(frozen=True)

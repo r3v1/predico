@@ -30,13 +30,17 @@ QUANTILES: dict[str, float] = {"q10": 0.1, "q50": 0.5, "q90": 0.9}
 EXCLUDED = {*META, *TARGETS}
 
 
-def feature_columns(df: pl.DataFrame) -> list[str]:
-    """Columnas de entrada: numéricas y que no sean meta, objetivo ni disponibilidad."""
+def feature_columns(df: pl.DataFrame, exclude_prefixes: tuple[str, ...] = ()) -> list[str]:
+    """Columnas de entrada: numéricas y que no sean meta, objetivo ni disponibilidad.
+
+    `exclude_prefixes` quita además las columnas que empiecen así (para pruebas de ablación,
+    p. ej. `("gust",)` deja fuera la racha, `gustfac_*` y `gust_missing`).
+    """
     return [
         c
         for c, t in df.schema.items()
         if c not in EXCLUDED
-        and not c.startswith(("y_", "available_at_"))
+        and not c.startswith(("y_", "available_at_", *exclude_prefixes))
         and (t.is_numeric() or t == pl.Boolean)
     ]
 
@@ -77,6 +81,7 @@ class LightGBM(Model):
         es_fraction: float = 0.15,
         es_min_days: int = 7,
         seed: int = 42,
+        exclude_prefixes: list[str] | None = None,
     ) -> None:
         self.hp: dict[str, Any] = {
             "learning_rate": learning_rate,
@@ -90,6 +95,7 @@ class LightGBM(Model):
             "es_fraction": es_fraction,
             "es_min_days": es_min_days,
             "seed": seed,
+            "exclude_prefixes": list(exclude_prefixes or []),
         }
         self._cols: list[str] = []
         self._boosters: dict[str, lgb.Booster] = {}
@@ -129,7 +135,7 @@ class LightGBM(Model):
 
     def fit(self, train: pl.DataFrame) -> None:
         t = train.drop_nulls("y_cf").sort("target_date", "ts_utc")
-        self._cols = feature_columns(t)
+        self._cols = feature_columns(t, tuple(self.hp["exclude_prefixes"]))
         fit_df, es_df = split_early_stop(t, self.hp["es_fraction"], self.hp["es_min_days"])
         self.fit_dates = (fit_df["target_date"].min(), fit_df["target_date"].max())
         self.es_dates = (es_df["target_date"].min(), es_df["target_date"].max())

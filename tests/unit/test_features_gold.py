@@ -10,7 +10,7 @@ import pytest
 from deltalake import DeltaTable
 
 from conftest import CAP_LAST, DATES, Synth
-from predico50hz.features.build import build_gold, write_gold
+from predico50hz.features.build import build_gold, split_expr, write_gold
 from predico50hz.features.capacity import load_clusters
 from predico50hz.features.registry import TARGETS, build_registry
 from predico50hz.features.target import build_target
@@ -75,8 +75,22 @@ def test_split_by_target_date(synth: Synth) -> None:
     df, _ = build_gold(synth.sources)
     by = df.group_by("target_date").agg(pl.col("split_v01").first()).sort("target_date")
     got = dict(zip(by["target_date"].to_list(), by["split_v01"].to_list(), strict=True))
-    assert got[dt.date(2026, 1, 16)] == "train"
+    assert got[dt.date(2026, 1, 16)] == "valid"
     assert got[dt.date(2026, 7, 11)] == "valid"
+
+
+def test_split_boundaries() -> None:
+    """Partición del histórico completo (ADR 0010): 6 meses `train`, `valid` hasta jul 2026."""
+    days = [
+        (dt.date(2024, 3, 31), "unused"),
+        (dt.date(2024, 4, 1), "train"),
+        (dt.date(2024, 9, 30), "train"),
+        (dt.date(2024, 10, 1), "valid"),
+        (dt.date(2026, 7, 31), "valid"),
+        (dt.date(2026, 8, 1), "holdout"),
+    ]
+    df = pl.DataFrame({"target_date": [d for d, _ in days]}).with_columns(split_expr())
+    assert df["split_v01"].to_list() == [name for _, name in days]
 
 
 def test_capacity_ffilled_flag_after_last_mastr_day(synth: Synth) -> None:

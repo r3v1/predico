@@ -1,6 +1,6 @@
 # ADR 0010 — Validación walk-forward, partición de la v0.1 y periodo reservado
 
-- **Estado:** aceptada
+- **Estado:** partición sustituida por ADR 0032 (el resto sigue vigente)
 - **Fecha:** 2026-10-16
 
 ## Contexto

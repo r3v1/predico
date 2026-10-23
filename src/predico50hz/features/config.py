@@ -41,9 +41,12 @@ STATS = ("ctrl", "mean", "std", "p10", "p50", "p90")
 INSTANT_INTERP = "linear"
 
 # Partición de la v0.1 por `target_date` (ADR 0010): (nombre, primer día, último día).
+# Con el histórico completo (abr 2024 a jul 2026): `train` son los 6 meses que solo entrenan (el
+# mínimo del primer pliegue) y `valid` los meses que se validan uno a uno, que además entrenan
+# los pliegues posteriores. `train` termina `DEFAULT_MIN_TRAIN_MONTHS` meses después del primero.
 SPLITS: tuple[tuple[str, dt.date, dt.date], ...] = (
-    ("train", dt.date(2025, 9, 1), dt.date(2026, 5, 31)),
-    ("valid", dt.date(2026, 6, 1), dt.date(2026, 7, 31)),
+    ("train", dt.date(2024, 4, 1), dt.date(2024, 9, 30)),
+    ("valid", dt.date(2024, 10, 1), dt.date(2026, 7, 31)),
     ("holdout", dt.date(2026, 8, 1), dt.date(2100, 1, 1)),
 )
 SPLIT_UNUSED = "unused"

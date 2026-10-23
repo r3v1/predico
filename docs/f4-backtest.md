@@ -16,7 +16,7 @@ uv run python -m predico50hz.evaluation report                          # scorec
 uv run python -m predico50hz.report                                     # informe ejecutivo (capítulo «¿Mejora el pronóstico?»)
 ```
 
-Opciones de `run`: `--min-train-months N` (3 por defecto), `--param clave=valor` (repetible, JSON; parámetros del modelo), `--gold`, `--operator`, `--root`. `report` acepta `--no-png` y `--out`. Si el periodo reservado ya se evaluó con ese modelo, `run --holdout` avisa por stderr (no bloquea).
+Opciones de `run`: `--min-train-months N` (6 por defecto), `--param clave=valor` (repetible, JSON; parámetros del modelo), `--gold`, `--operator`, `--root`. `report` acepta `--no-png` y `--out`. Si el periodo reservado ya se evaluó con ese modelo, `run --holdout` avisa por stderr (no bloquea).
 
 | Módulo | Función |
 |---|---|
@@ -51,20 +51,40 @@ Si el modelo no da cuantiles (el operador) Winkler, cobertura y ancho son `null`
 
 ## 3. Pliegues y regla del periodo reservado
 
-Walk-forward con ventana creciente, un pliegue por mes natural de `target_date` sobre `split_v01` ∈ {train, valid} (2025-09-02 … 2026-07-31). Entrenamiento del pliegue = todas las filas con `target_date` estrictamente anterior al primer día del mes. El primer pliegue empieza `min_train_months` (3) meses naturales después del primero con datos. Fechas reales:
+Walk-forward con ventana creciente, un pliegue por mes natural de `target_date` sobre `split_v01` ∈ {train, valid} (2024-04-02 … 2026-07-31: 28 meses de desarrollo, 1 abr 2024 – 31 jul 2026). Entrenamiento del pliegue = todas las filas con `target_date` estrictamente anterior al primer día del mes. El primer pliegue empieza `min_train_months` (**6**) meses naturales después del primero con datos.
 
-| Pliegue | Validación | Entrenamiento hasta | Filas / días de entrenamiento | Filas evaluadas |
-|---|---|---|---|---|
-| 0 | 2025-12-01 → 12-31 | 2025-11-30 | 8 644 / 90 | 2 976 |
-| 1 | 2026-01-01 → 01-31 | 2025-12-31 | 11 620 / 121 | 2 976 |
-| 2 | 2026-02-01 → 02-28 | 2026-01-31 | 14 596 / 152 | 2 688 |
-| 3 | 2026-03-01 → 03-31 | 2026-02-28 | 17 284 / 180 | 2 972 (día de 92 pasos) |
-| 4 | 2026-04-01 → 04-30 | 2026-03-31 | 20 256 / 211 | 2 880 |
-| 5 | 2026-05-01 → 05-31 | 2026-04-30 | 23 136 / 241 | 2 976 |
-| 6 | 2026-06-01 → 06-30 | 2026-05-31 | 26 112 / 272 | 2 880 |
-| 7 | 2026-07-01 → 07-31 | 2026-06-30 | 28 992 / 302 | 2 976 |
+**Por qué 6 meses.** Con 3 (el valor de la v0.1 con 13 meses) el primer pliegue entrenaba con 90 días y los tres primeros con 90 a 152: el error de diciembre reflejaba el entrenamiento corto, no el modelo. Con 6, el primer pliegue valida octubre de 2024 con 182 días de entrenamiento, los de diciembre de 2024 y enero de 2025 entrenan con 243 y 274 días y quedan 22 pliegues. El invierno 2024/25 (dic, ene, feb) entra entero en validación; sería así con cualquier valor hasta 8, que es el máximo (con 9 se perdería el diciembre de 2024). Se eligió 6 y no 8 porque medio año es el mínimo con el que el modelo ha visto dos estaciones distintas (primavera-verano) y porque deja octubre y noviembre de 2024 en validación: es el único tramo evaluado con la racha ausente en entrenamiento y validación (§8.4). Coincide con el fin de `train` en `split_v01` (un test lo comprueba).
 
-Total: 23 324 filas, 243 días. El periodo reservado (`holdout`, desde 2026-08-01) **nunca** entra en pliegues ni en entrenamiento de validación (`tests/leakage/test_backtest_folds.py`: entrenamiento < inicio del pliegue, holdout fuera, sin solapes, ventana creciente, mínimo de meses; también sobre la tabla real).
+**`split_v01` (ADR 0010, redefinido con el histórico completo).** `train` = 2024-04-01 → 2024-09-30 (los 6 meses que solo entrenan), `valid` = 2024-10-01 → 2026-07-31 (los meses que se validan uno a uno, que además entrenan los pliegues siguientes) y `holdout` = desde 2026-08-01, sin cambios. Las 3 etiquetas siguen siendo meta, nunca feature.
+
+| Pliegue | Validación | Entrenamiento hasta | Filas / días de entrenamiento |
+|---|---|---|---|
+| 0 | 2024-10-01 → 2024-10-31 | 2024-09-30 | 17 472 / 182 |
+| 1 | 2024-11-01 → 2024-11-30 | 2024-10-31 | 20 452 / 213 |
+| 2 | 2024-12-01 → 2024-12-31 | 2024-11-30 | 23 332 / 243 |
+| 3 | 2025-01-01 → 2025-01-31 | 2024-12-31 | 26 308 / 274 |
+| 4 | 2025-02-01 → 2025-02-28 | 2025-01-31 | 29 284 / 305 |
+| 5 | 2025-03-01 → 2025-03-31 | 2025-02-28 | 31 972 / 333 |
+| 6 | 2025-04-01 → 2025-04-30 | 2025-03-31 | 34 944 / 364 |
+| 7 | 2025-05-01 → 2025-05-31 | 2025-04-30 | 37 824 / 394 |
+| 8 | 2025-06-01 → 2025-06-30 | 2025-05-31 | 40 800 / 425 |
+| 9 | 2025-07-01 → 2025-07-31 | 2025-06-30 | 43 680 / 455 |
+| 10 | 2025-08-01 → 2025-08-31 | 2025-07-31 | 46 656 / 486 |
+| 11 | 2025-09-01 → 2025-09-30 | 2025-08-31 | 49 632 / 517 |
+| 12 | 2025-10-01 → 2025-10-31 | 2025-09-30 | 52 512 / 547 |
+| 13 | 2025-11-01 → 2025-11-30 | 2025-10-31 | 55 492 / 578 |
+| 14 | 2025-12-01 → 2025-12-31 | 2025-11-30 | 58 372 / 608 |
+| 15 | 2026-01-01 → 2026-01-31 | 2025-12-31 | 61 348 / 639 |
+| 16 | 2026-02-01 → 2026-02-28 | 2026-01-31 | 64 324 / 670 |
+| 17 | 2026-03-01 → 2026-03-31 | 2026-02-28 | 67 012 / 698 |
+| 18 | 2026-04-01 → 2026-04-30 | 2026-03-31 | 69 984 / 729 |
+| 19 | 2026-05-01 → 2026-05-31 | 2026-04-30 | 72 864 / 759 |
+| 20 | 2026-06-01 → 2026-06-30 | 2026-05-31 | 75 840 / 790 |
+| 21 | 2026-07-01 → 2026-07-31 | 2026-06-30 | 78 720 / 820 |
+
+Total: 64 224 filas evaluadas, 669 días (92 y 100 pasos en 4 días de cambio de hora). Con la tabla anterior (410 cierres) eran 8 pliegues, de dic 2025 a jul 2026 (23 324 filas, 243 días); esos 8 meses siguen siendo parte de los nuevos pliegues y se reportan aparte en §8.4 (con modelos entrenados con más historia, así que no son idénticos a los de antes).
+
+El periodo reservado (`holdout`, desde 2026-08-01) **nunca** entra en pliegues ni en entrenamiento de validación (`tests/leakage/test_backtest_folds.py`: entrenamiento < inicio del pliegue, holdout fuera, sin solapes, ventana creciente, mínimo de meses; también sobre la tabla real).
 
 **Holdout (`--holdout`)**: modo explícito. Entrena con todo train + valid y evalúa 2026-08-01 → 2026-10-16 (7 354 filas con realidad, 76 días; se descartan las 38 filas sin generación del último cierre). Cada evaluación añade una línea a `data/backtest/holdout_log.jsonl` (`at`, `run_id`, `model`, `user` del sistema, `gold_version`, veces evaluado antes por modelo y en total); el scorecard y el informe muestran el contador. El aviso por consola es solo informativo: la disciplina (no optimizar hiperparámetros con él) es del equipo.
 
@@ -111,6 +131,8 @@ MLFLOW_ALLOW_FILE_STORE=true uvx --from 'mlflow==3.17.2' mlflow ui \
 ```
 
 ## 8. Resultados de las referencias (ejecución del 2026-10-16, tabla oro versión Delta 1)
+
+> §8 a §8.3 son las cifras con **410 cierres** (sep 2025 – oct 2026, 8 pliegues). Quedan como historial; las vigentes con los 30 meses están en §8.4.
 
 Validación walk-forward (dic 2025 – jul 2026, 23 324 filas, 243 días):
 
@@ -202,6 +224,75 @@ Validación walk-forward, las mismas 23 324 filas y 243 días, margen de 180 min
 
 Pruebas: `tests/unit/test_models_persistence.py` (corte inclusivo con horario de verano e invierno, alterar la generación posterior al corte no cambia ninguna predicción ni cuantil, modos con serie sintética conocida, exclusión de puntos rellenados y obsolescencia, cuantiles ordenados).
 
+### 8.4 Histórico completo: 30 meses, 22 pliegues (ejecución del 2026-10-23, tabla oro versión Delta 7)
+
+Tabla oro regenerada desde 2024-04-01 (936 cierres, 89 856 filas; `docs/f3-features.md` §6). Validación walk-forward con los 22 pliegues de §3: **64 224 filas, 669 días, oct 2024 – jul 2026**. Ejecuciones (`--mlflow`): `20261023T163349Z-operator-validation`, `20261023T163351Z-climatology-validation`, `20261023T163354Z-power_curve-validation`, `20261023T163357Z-persistence-validation`, `20261023T163749Z-lgbm-validation`, `20261023T164140Z-lgbm_cqr-validation`. El periodo reservado no se ha evaluado.
+
+**Validación completa (oct 2024 – jul 2026):**
+
+| Modelo | RMSE Q50 (MW) | vs operador | Winkler | Cobertura 80 % | Ancho medio (MW) | Días mejores que el operador |
+|---|---|---|---|---|---|---|
+| Operador (ENTSO-E B18+B19) | **876,6** | — | — | — | — | — |
+| Curva de potencia | 1 103,9 | −25,9 % | 3 514,6 | 81,4 % | 2 431,4 | 22,4 % |
+| LightGBM v0.1 | **1 060,8** | −21,0 % | 3 450,6 | 71,2 % | 2 022,3 | 25,6 % |
+| LightGBM v0.1 + CQR | 1 060,8 | −21,0 % | **3 396,5** | 79,5 % | 2 310,1 | 25,6 % |
+| Climatología | 3 561,1 | −306,3 % | 11 806,2 | 79,1 % | 8 993,9 | 2,2 % |
+| Persistencia | 3 881,3 | −342,8 % | 12 464,8 | 79,1 % | 7 689,8 | 3,3 % |
+
+Otras métricas en validación (operador / curva de potencia / LightGBM): MAE 589,9 / 765,1 / 741,1 MW; sesgo +43,9 / −30,9 / −19,3 MW; error de pico 758,5 / 1 059,6 / 1 013,2 MW y desfase del pico 3,0 / 3,4 / 3,3 h.
+
+**Periodo antiguo (dic 2025 – jul 2026, 23 324 filas, 243 días; los 8 pliegues de antes), para comparar con §8 a §8.3.** Mismas predicciones de la ejecución completa, restringidas a esas fechas; los modelos de cada mes ahora entrenan con 608 a 820 días (antes 90 a 302).
+
+| Modelo | RMSE antes (410 cierres) | RMSE ahora | Winkler ahora | Cobertura ahora | Días mejores que el operador |
+|---|---|---|---|---|---|
+| Operador | 931,2 | 931,2 | — | — | — |
+| Curva de potencia | 1 196,6 | 1 197,8 | 3 697,0 | 82,5 % | 22,6 % |
+| LightGBM v0.1 | 1 233,1 | **1 128,7** | 3 529,2 | 70,9 % | 23,9 % |
+| LightGBM v0.1 + CQR | 1 233,1 | 1 128,7 | **3 490,9** | 79,0 % | 23,9 % |
+| Climatología | 3 406,4 | 3 300,6 | 11 346,0 | 81,9 % | 3,3 % |
+| Persistencia | 3 746,1 | 3 746,1 | 11 783,9 | 79,6 % | 4,1 % |
+
+El operador y la persistencia no cambian porque no entrenan (la persistencia solo calibra su intervalo). La curva de potencia apenas se mueve: es una función simple de una sola variable y ya estaba estable con 90 días. **LightGBM sí mejora con más historia**: −8,5 % de RMSE (de 1 233,1 a 1 128,7 MW) y pasa a ganar a la curva de potencia (−5,8 %) en este mismo periodo, donde antes perdía (+3 %). Sigue un 21,2 % por detrás del operador.
+
+**Invierno 2024/25 (dic 2024 – feb 2025, 8 640 filas)**, el de más viento, que antes no estaba en validación: operador 901,5 MW, curva de potencia 1 149,4, LightGBM 1 187,8 (cobertura 67,8 %; con CQR 80,7 %, Winkler 4 008,5). **En invierno LightGBM no gana a la curva de potencia** (+3,3 % de RMSE), igual que en la v0.1: con 8 a 10 meses de entrenamiento previo no ha visto nunca un invierno. Es el periodo donde más cuesta la cobertura del intervalo sin CQR.
+
+Por mes (RMSE en MW; cobertura del 80 % de LightGBM sin y con CQR):
+
+| Mes | Operador | Curva de potencia | LightGBM | Cobertura LightGBM | Cobertura con CQR |
+|---|---|---|---|---|---|
+| 2024-10 | 899 | 955 | 994 | 71,8 % | 74,2 % |
+| 2024-11 | 857 | 1 174 | 1 229 | 58,1 % | 78,6 % |
+| 2024-12 | 903 | 1 300 | 1 338 | 63,9 % | 78,7 % |
+| 2025-01 | 1 071 | 1 220 | 1 304 | 69,3 % | 80,8 % |
+| 2025-02 | 663 | 852 | 819 | 70,5 % | 82,8 % |
+| 2025-03 | 795 | 995 | 945 | 64,7 % | 78,6 % |
+| 2025-04 | 787 | 994 | 980 | 64,8 % | 78,9 % |
+| 2025-05 | 765 | 1 002 | 931 | 77,3 % | 86,8 % |
+| 2025-06 | 959 | 1 256 | 1 131 | 77,2 % | 81,2 % |
+| 2025-07 | 746 | 984 | 953 | 80,4 % | 83,6 % |
+| 2025-08 | 616 | 762 | 657 | 79,8 % | 80,6 % |
+| 2025-09 | 941 | 1 009 | 898 | 73,1 % | 74,3 % |
+| 2025-10 | 860 | 1 055 | 952 | 71,7 % | 78,0 % |
+| 2025-11 | 830 | 934 | 909 | 75,8 % | 81,0 % |
+| 2025-12 | 849 | 1 009 | 875 | 76,0 % | 80,4 % |
+| 2026-01 | 992 | 1 342 | 1 416 | 57,4 % | 64,1 % |
+| 2026-02 | 919 | 1 156 | 1 240 | 62,0 % | 79,5 % |
+| 2026-03 | 805 | 871 | 770 | 80,4 % | 92,9 % |
+| 2026-04 | 1 476 | 1 868 | 1 647 | 66,4 % | 73,9 % |
+| 2026-05 | 587 | 728 | 725 | 80,1 % | 85,3 % |
+| 2026-06 | 675 | 1 131 | 966 | 69,1 % | 76,5 % |
+| 2026-07 | 888 | 1 147 | 1 087 | 74,6 % | 79,1 % |
+
+**Lectura.**
+
+- Con el histórico completo LightGBM v0.1 mejora a la curva de potencia (−3,9 % de RMSE en todo el periodo) pero el operador sigue por delante (+21 % de error). No cumple G1 (el error pesa) aunque con CQR la cobertura (79,5 %) y el Winkler (el mejor de todos) sí lo hacen. En el periodo de antes (dic 2025 – jul 2026) la brecha con el operador baja de +32 % a +21 %.
+- Los meses fríos con más viento (nov 2024 – ene 2025 y ene – feb 2026) son los peores del modelo respecto a la curva de potencia y a su propia cobertura: enero de 2026 sigue siendo el peor (cobertura 57,4 % sin CQR y 64,1 % con CQR; el intervalo del mes anterior no sirve para un mes mucho más difícil, igual que en §8.2).
+- La cobertura de la CQR por mes va del 64 al 93 %: el total (79,5 %) está en banda, pero el error cambia mucho de un mes a otro y la ventana de 60 días va con retraso (`models/cqr.py`). Los 14 primeros días del primer pliegue no se calibran.
+
+**Racha antes del 2024-11-13 (decisión: NaN nativa de LightGBM + `gust_missing`).** 226 cierres (21 700 filas, 24 % de la tabla) no tienen racha; las columnas `gust_*` y `gustfac_*` están en NaN y `gust_missing` = 1 (comprobado con datos reales y Pandera: coincide exactamente con los cierres anteriores al 2024-11-13; el 2024-11-12 es el último sin racha y el 11-13 el primero con ella). Para decidir entre NaN y quitar la variable se repitió LightGBM sin ninguna columna que empiece por `gust` (parámetro `exclude_prefixes=["gust"]`, ejecución de prueba aparte, no entra en el scorecard): RMSE 1 054,3 MW frente a 1 060,8 con ella (−0,6 %; Winkler 3 441,2 frente a 3 450,6; cobertura 71,3 % frente a 71,2 %). Por tramos: oct 24 – 12 nov 24 idéntico (la racha es constante en NaN en entrenamiento y validación), 13 nov 24 – nov 25 −0,9 %, dic 25 – jul 26 −0,4 %, invierno 24/25 +0,7 %: todo dentro del ruido. La racha aporta el 0,2 % de la ganancia en Q50 y el 1 % en Q10/Q90 (sobre todo `gust_sea_p90`, `gust_sea_mean`, `gust_land_mean`). Conclusión: la NaN nativa funciona (no rompe nada y da prácticamente lo mismo que quitar la variable), así que se mantiene el camino existente: es el que usará la producción cuando falle una racha y no obliga a descartar los 7 primeros meses. No se encontró que la racha ayude al error central; el Q10/Q90 podría aprovecharla algo más, y se vuelve a medir tras Optuna. Riesgo menor: `gust_missing` es un indicador de época (solo vale 1 antes de nov 2024) y los árboles podrían usarlo como atajo temporal en el entrenamiento; su ganancia es ≈ 0, y nunca vale 1 en los pliegues posteriores a noviembre de 2024, así que no puede afectar a esos meses.
+
+Pruebas: `tests/leakage/test_backtest_folds.py` (también sobre la tabla real: primer pliegue 2024-10, último 2026-07, 22 pliegues, coherencia con `split_v01`), `tests/unit/test_features_gold.py::test_split_boundaries` y `tests/leakage/test_leakage_features.py` sobre la tabla nueva.
+
 ## 9. Limitaciones y no verificado
 
 - **Persistencia:** el margen de 180 min sale de una sola semana de medidas de octubre de 2026 (~40 observaciones: retraso normal de 30 a 62 min y un atasco de hasta 166 min el 22 de octubre); en otras épocas o con incidencias más largas de ENTSO-E podría ser mayor. Además, la generación histórica de la plata es la **última revisión**, no la que estaba publicada en el momento del cierre, así que el valor «último conocido» puede ser algo mejor que el real. Con el mismo cuidado hay que leer su RMSE.
@@ -210,12 +301,13 @@ Pruebas: `tests/unit/test_models_persistence.py` (corte inclusivo con horario de
   - **Esa versión no cambia.** En la copia de la VM (173 descargas, del 16 al 23 oct 2026) se compararon todas las versiones de cada día objetivo del 17 al 23 oct (7 días, 96 cuartos cada uno, B18 + B19): entre la primera y la última, y también entre la última descarga anterior al inicio del día y la última, la diferencia es **0 MW** (RMSE y MAE nulos) y no hay ninguna descarga posterior con un valor distinto. El pronóstico se publica una vez y no se revisa.
   - **Sesgo estimado por versión: 0 MW de RMSE** (7 días). El sesgo que queda es otro y no se puede medir con los datos: el operador publica con información más reciente que el cierre (unas 4 h), de modo que su error puede ser algo menor que el de cualquier modelo que solo vea lo anterior al cierre. Comparar con él sigue siendo exigente y sirve de cota, no de igualdad de condiciones.
   - **No verificado:** una sola semana de octubre; no se sabe si en otras épocas el operador revisa su pronóstico. Hay que repetir la comparación (`first_published` frente a `latest`) cuando haya más semanas y, si aparecen revisiones, medir su efecto sobre el RMSE.
-- **Holdout de verano-otoño con poco viento** (`y_cf` medio 0,181 frente a 0,203 en train): no garantiza diciembre. La validación solo tiene un invierno, y ya forma parte del entrenamiento a partir de febrero: con 13 meses los modelos no han visto nunca el mismo mes natural previo (por eso la climatología usa los meses vecinos ±1 y, si no hay, todo el entrenamiento).
+- **Holdout de verano-otoño con poco viento** (`y_cf` medio 0,184 frente a 0,189 en validación): no garantiza diciembre. La validación ahora tiene dos inviernos (2024/25 y 2025/26), pero los primeros pliegues siguen sin haber visto el mismo mes natural previo (por eso la climatología usa los meses vecinos ±1 y, si no hay, todo el entrenamiento) y el invierno 2024/25 se valida con solo 8 a 10 meses de entrenamiento: es donde LightGBM no gana a la curva de potencia (§8.4).
 - **Cobertura en meses sueltos** oscila entre 69 y 83 %: con ~2 900 filas por mes y autocorrelación fuerte, la banda 76–84 % del total es una condición sobre 8 meses, no una garantía por mes. La CQR (§8.2) lleva el total al 79,8 %, pero por mes sigue entre 63 y 91 %.
 - El **denominador** (`y_cap_mw`) usa MaStR con altas registradas a posteriori (`docs/f3-features.md` §11), igual para modelo y operador (el operador se compara en MW, sin conversión).
-- Las clasificaciones se hacen con una única tabla oro (410 cierres); al ampliar el histórico (etapa 3) los pliegues cambiarán y habrá que repetir las ejecuciones.
+- Las clasificaciones vigentes son las de §8.4 (tabla oro versión Delta 7, 936 cierres, 22 pliegues). Las de §8 a §8.3 (410 cierres) quedan como historial. Cada vez que cambie el histórico, los pliegues cambian y hay que repetir las ejecuciones. El periodo reservado ahora tiene más días con realidad (la tabla llega al cierre del 2026-10-23) que cuando se evaluó por última vez la v0.1: si se evalúa, el número de filas no será el de §3.
 - El contador del holdout detecta mirar demasiado, no lo impide; las ejecuciones se pueden borrar a mano de `data/backtest/`, pero el registro `holdout_log.jsonl` es de solo añadir.
-- Pliegues de entrenamiento muy cortos al principio (90 días en el primero): el error de diciembre refleja eso.
+- Pliegues de entrenamiento cortos al principio (182 días en el primero, 213 en el segundo): el error de oct y nov de 2024 es el de un modelo que solo ha visto primavera y verano, y esos dos meses no sirven para comparar con los siguientes. La media de todo el periodo los incluye (4 132 filas de las 64 224 en la racha ausente, 6,4 %).
+- **Racha ausente en los primeros 7 meses** (§8.4): la NaN nativa se ha comprobado con datos reales, pero el efecto de la racha sobre el error es menor que el ruido (±1 %), así que no se ha podido medir si ayuda; se repite tras Optuna.
 - No se ha verificado el capítulo del informe en móvil; sí en escritorio claro con capturas de Chromium (el modo oscuro usa los mismos tokens de color).
 
 ## 10. Test de integración extremo a extremo

@@ -15,7 +15,7 @@ Las tareas pendientes están en los [issues](https://github.com/r3v1/predico/iss
 | [0007](0007-clusteres-mastr.md) | Aerogeneradores de MaStR agrupados en clústeres | aceptada |
 | [0008](0008-objetivo-factor-de-capacidad.md) | Objetivo: factor de capacidad con la capacidad de MaStR | aceptada |
 | [0009](0009-uniones-as-of-y-anti-look-ahead.md) | Uniones «as-of» y test automático anti look-ahead | aceptada |
-| [0010](0010-validacion-walk-forward-y-periodo-reservado.md) | Validación walk-forward, partición de la v0.1 y periodo reservado | aceptada |
+| [0010](0010-validacion-walk-forward-y-periodo-reservado.md) | Validación walk-forward, partición de la v0.1 y periodo reservado | partición sustituida por 0032 |
 | [0011](0011-metricas-identicas-a-predico.md) | Métricas idénticas a las de Predico | aceptada |
 | [0012](0012-interpolacion-temporal.md) | Interpolación temporal de 3 h a 15 min | aceptada |
 | [0013](0013-serie-objetivo-entsoe.md) | Serie objetivo: generación de ENTSO-E reconstruida como Predico | aceptada |
@@ -37,6 +37,7 @@ Las tareas pendientes están en los [issues](https://github.com/r3v1/predico/iss
 | [0029](0029-experimentos-y-versionado-del-modelo.md) | Trazabilidad de experimentos y versionado semántico del modelo | aceptada |
 | [0030](0030-persistencia-con-margen-de-publicacion.md) | Persistencia con un margen de publicación de 180 min | aceptada |
 | [0031](0031-precio-day-ahead-solo-del-dia-del-cierre.md) | Precio day-ahead: el de D+1 no entra; el de D, como candidato | aceptada |
+| [0032](0032-particion-con-el-historico-completo.md) | Partición y pliegues con el histórico completo | aceptada |
 
 ## Plantilla
 

@@ -37,6 +37,21 @@ def test_feature_selection_excludes_meta_and_targets(gold: pl.DataFrame) -> None
     assert set(cols) == {"month", "hour_local", "wshub_all_mean"}
 
 
+def test_exclude_prefixes_drops_gust_columns() -> None:
+    df = pl.DataFrame(
+        {
+            "ws": [1.0],
+            "gust_all_mean": [2.0],
+            "gustfac_all": [1.5],
+            "gust_missing": [0],
+            "y_cf": [0.1],
+        }
+    )
+    assert feature_columns(df) == ["ws", "gust_all_mean", "gustfac_all", "gust_missing"]
+    assert feature_columns(df, ("gust",)) == ["ws"]
+    assert LightGBM(exclude_prefixes=["gust"]).params()["exclude_prefixes"] == ["gust"]
+
+
 def test_quantile_order_and_clipping_after_framework(gold: pl.DataFrame) -> None:
     train, valid = _split(gold)
     m = LightGBM(**FAST)

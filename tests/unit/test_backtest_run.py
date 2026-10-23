@@ -29,7 +29,14 @@ def env(tmp_path: Path) -> dict:
 
 
 def _run(env: dict, name: str, **kw):
-    return run_backtest(name, root=env["root"], operator=env["op"], table=(env["gold"], 3), **kw)
+    return run_backtest(
+        name,
+        root=env["root"],
+        operator=env["op"],
+        table=(env["gold"], 3),
+        min_train_months=3,  # los datos sintéticos son de 13 meses
+        **kw,
+    )
 
 
 def test_finalize_orders_clips_and_converts() -> None:

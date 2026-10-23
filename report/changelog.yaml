@@ -2,6 +2,15 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.13"
+    date: 2026-10-23
+    title: La prueba se repite con los 30 meses de historia
+    items:
+      - "La prueba del modelo ya no usa solo 13 meses: se ha rehecho con todo el histórico, de abril de 2024 a julio de 2026. Ahora incluye el invierno 2024/25, que antes no se había visto."
+      - "La prueba pasa de 8 a 22 meses evaluados uno a uno (de octubre de 2024 a julio de 2026). Cada mes se evalúa con un modelo que solo ha visto los meses anteriores."
+      - "El modelo de árboles mejora con más historia: en el mismo periodo de antes (diciembre 2025 a julio 2026) su error baja de 1.233 a 1.129 MW. Sigue por detrás del operador (931 MW en ese periodo) y ya supera a la curva de potencia."
+      - "Con los 22 meses, el modelo de árboles se equivoca 1.061 MW de media y el operador 877 MW: un 21 % más. Con el rango calibrado, la producción real cae dentro del rango previsto el 79,5 % del tiempo, dentro de la banda exigida."
+      - "La racha de viento no existe antes del 13 de noviembre de 2024. Se probó con datos reales: dejar el hueco vacío o quitar la variable da el mismo resultado (la diferencia es menor del 1 %), así que se deja vacío y el modelo sabe que falta."
   - version: "0.12"
     date: 2026-10-23
     title: El precio de mañana llega demasiado justo

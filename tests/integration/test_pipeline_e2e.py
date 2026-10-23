@@ -187,7 +187,8 @@ def test_gold_table(chain: Chain) -> None:
     assert schema_issues(build_registry(clusters), gold) == []  # esquema Pandera de la oro
     assert day_issues(gold) == []
     assert gold.select(KEY).is_duplicated().sum() == 0
-    assert set(gold["split_v01"]) == {"train", "valid", "holdout"}
+    # los cierres sintéticos son de 2026: caen en `valid` y `holdout` (`train` es de 2024)
+    assert set(gold["split_v01"]) == {"valid", "holdout"}
     assert gold["y_cf"].null_count() == 0
     assert gold["y_cf"].min() >= 0
     assert gold["y_cf"].max() <= 1.0

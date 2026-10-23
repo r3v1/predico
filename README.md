@@ -208,6 +208,7 @@ uv run python -m predico50hz.features --start 2026-10-01 --end 2026-10-15   # so
 uv run python -m predico50hz.features --validate-only
 ```
 
+- **Cobertura:** 936 cierres, del 1 abr 2024 al día de hoy; antes del 13 nov 2024 la racha es NaN con `gust_missing` = 1.
 - **Una fila por intervalo de 15 min del día objetivo** (día local D+1: 96 pasos, 92 o 100 en los cambios de hora) y por `forecast_issue_date` D (día del cierre, 15:00 de Berlín = 13:00 UTC en verano y 14:00 UTC en invierno).
 - **Variables** (239): viento a 100 m por clúster (ctrl, media, cuantiles, dispersión), agregados ponderados por la capacidad MaStR de la fecha (v³, buje a 119/104 m, cizalladura, densidad, estabilidad, racha, dirección, dispersión espacial), capacidad, calendario local y plazo.
 - **Objetivo** `y_*`: generación en MW y factor de capacidad con la capacidad MaStR del día. El pronóstico del operador (publicado hacia las 17:00 UTC, 4 h después del cierre) y el precio no entran: el de D+1 solo estuvo antes del cierre la mitad de los días (ADR 0031, `docs/f2-entsoe.md` §3).
@@ -242,7 +243,7 @@ uv run python -m predico50hz.evaluation report                            # scor
 MLFLOW_ALLOW_FILE_STORE=true uvx --from 'mlflow==3.17.2' mlflow ui --backend-store-uri file:data/mlflow
 ```
 
-Métricas como Predico, en MW: RMSE del Q50, Winkler medio (α = 0,2), cobertura del 80 %, error de pico y días ganados al operador. El `scorecard.json` da el veredicto «mejora / empeora / igual» y el estado de G1, y alimenta el capítulo «¿Mejora el pronóstico?» del informe ejecutivo. Validación dic 2025 – jul 2026 (RMSE del Q50): operador 931 MW, curva de potencia 1 197 MW, LightGBM v0.1 sin optimizar 1 233 MW (cobertura 64 %; con calibración conformal CQR, `lgbm_cqr`, 79,8 % y Winkler −4,4 %), climatología 3 406 MW, persistencia 3 746 MW (repite la última generación publicada a `cierre − 180 min`; el margen sale de la medición de #11, `docs/f2-entsoe.md` §3). Cada ejecución se registra en MLflow (`data/mlflow`, con `mlflow-skinny`) con la versión de la tabla oro y el snapshot del bronce NWP. Detalle en `docs/f4-backtest.md`.
+Métricas como Predico, en MW: RMSE del Q50, Winkler medio (α = 0,2), cobertura del 80 %, error de pico y días ganados al operador. El `scorecard.json` da el veredicto «mejora / empeora / igual» y el estado de G1, y alimenta el capítulo «¿Mejora el pronóstico?» del informe ejecutivo. Validación con el histórico completo, 22 pliegues mensuales de oct 2024 a jul 2026 (ADR 0032; RMSE del Q50): operador 877 MW, LightGBM v0.1 sin optimizar 1 061 MW (cobertura 71 %; con calibración conformal CQR, `lgbm_cqr`, 79,5 % y el mejor Winkler), curva de potencia 1 104 MW, climatología 3 561 MW, persistencia 3 881 MW (repite la última generación publicada a `cierre − 180 min`; el margen sale de la medición de #11, `docs/f2-entsoe.md` §3). La referencia del operador es la última revisión: en la semana medida su pronóstico no se revisa nunca tras publicarse (#28). Cada ejecución se registra en MLflow (`data/mlflow`, con `mlflow-skinny`) con la versión de la tabla oro y el snapshot del bronce NWP. Detalle en `docs/f4-backtest.md`.
 
 ## Estructura
 

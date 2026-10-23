@@ -17,8 +17,8 @@ insights:
   - title: La racha de viento solo existe desde noviembre de 2024
     level: watch
     what: "La fuente meteorológica no incluye la racha máxima de viento antes del 13 de noviembre de 2024: son unos siete meses del histórico (abril a noviembre de 2024)."
-    meaning: "Los picos y las paradas por viento extremo son más difíciles de anticipar sin esa variable en el tramo más antiguo."
-    action: "Tratamos la racha como opcional y la sustituimos por un indicador aproximado cuando falta."
+    meaning: "Los picos y las paradas por viento extremo son más difíciles de anticipar sin esa variable en el tramo más antiguo. Medido con datos reales, el efecto es pequeño: con o sin racha el error cambia menos de un 1 %."
+    action: "La dejamos vacía donde falta y marcamos esos días para que el modelo lo sepa. Se vuelve a medir cuando el modelo se ajuste."
   - title: La previsión meteorológica solo sale una vez al día
     level: info
     what: "Solo utilizamos la pasada de medianoche (00 UTC) del modelo europeo; la fuente no publica más pasadas útiles para nosotros."
@@ -38,7 +38,7 @@ insights:
     level: watch
     what: "El tramo reservado para evaluar al modelo (agosto a octubre de 2026) es verano y otoño, con poco viento; la liga empieza en diciembre, el mes de más viento."
     meaning: "Un buen resultado en ese tramo no garantiza buen comportamiento en un temporal invernal."
-    action: "Entrenamos con 13 meses (incluido el invierno anterior) y, antes del 12 de noviembre, ampliamos el histórico hasta abril de 2024."
+    action: "Ya hemos ampliado el histórico hasta abril de 2024 (30 meses). La prueba mes a mes incluye ahora el invierno 2024/25 y el de 2025/26; el tramo reservado sigue sin tocarse."
   - title: La descarga diaria funciona sola desde hace una semana
     level: ok
     what: "Del 16 al 22 de octubre, el servidor descargó cada día la previsión meteorológica y los datos del operador sin ningún fallo y sin que nadie lo tocara. La previsión llegó siempre entre las 10:15 y las 10:18 (hora de Madrid), con unas 4 h 40 min de margen antes del cierre de la liga."

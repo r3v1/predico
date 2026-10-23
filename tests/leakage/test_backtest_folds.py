@@ -10,6 +10,7 @@ import pytest
 
 from backtest_synth import synth_gold
 from predico50hz.evaluation import folds as fl
+from predico50hz.features.config import SPLITS
 
 GOLD = Path(__file__).resolve().parents[2] / "data" / "gold" / "features"
 MIN_MONTHS = [1, 2, 3, 4]
@@ -85,10 +86,25 @@ def test_real_table_folds_cover_validation_and_train_months() -> None:
     if not (GOLD / "_delta_log").is_dir():
         pytest.skip("sin tabla oro")
     df = pl.read_delta(str(GOLD)).select("target_date", "split_v01")
-    folds = fl.dev_folds(df, 3)
-    assert folds[0].valid_start == dt.date(2025, 12, 1)
+    folds = fl.dev_folds(df)
+    assert folds[0].valid_start == dt.date(2024, 10, 1)
     assert folds[-1].valid_end == dt.date(2026, 7, 31)
-    assert len(folds) == 8
+    assert len(folds) == 22
+    # el invierno 2024/25 está en validación, con al menos 8 meses de entrenamiento previo
+    winter = [f for f in folds if f.valid_start in {dt.date(2024, 12, 1), dt.date(2025, 1, 1)}]
+    assert len(winter) == 2
+    # el periodo reservado empieza justo después del último pliegue
+    holdout = df.filter(pl.col("split_v01") == "holdout")["target_date"].min()
+    assert holdout == dt.date(2026, 8, 1)
+
+
+def test_split_train_matches_default_min_train_months() -> None:
+    """`train` (solo entrena) termina donde empieza el primer pliegue por defecto."""
+    spans = {name: (lo, hi) for name, lo, hi in SPLITS}
+    first_fold = fl.make_folds(spans["train"][0], spans["holdout"][0])[0]
+    assert first_fold.train_end == spans["train"][1]
+    assert spans["valid"][0] == first_fold.valid_start
+    assert spans["valid"][1] + dt.timedelta(days=1) == spans["holdout"][0]
 
 
 def test_holdout_split_trains_on_dev_only() -> None:

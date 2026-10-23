@@ -104,7 +104,7 @@ Formato ancho, una fila por intervalo. Todas son `Float64` salvo los indicadores
 | `wdir100_<g>_{sin,cos}` | Seno y coseno de la dirección meteorológica (de dónde sopla): −u/\|V\|, −v/\|V\|; 0 si el viento medio es nulo |
 | `disp_land_std`, `disp_land_range`, `disp_land_cv` | Dispersión espacial de `ws100_mean` entre los 16 clústeres de tierra: desviación típica ponderada por capacidad, máx − mín y std/media (m/s, m/s, adimensional) |
 | `ws100_sea_minus_land` | Viento a 100 m medio de mar menos el de tierra (m/s) |
-| `gust_missing` | 1 si la plata NWP no trae racha para esa pasada (anterior al 2024-11-13); 0 en toda la tabla actual |
+| `gust_missing` | 1 si la plata NWP no trae racha para esa pasada: los 226 cierres del 2024-04-01 al 2024-11-12 (21 700 filas); 0 desde el 2024-11-13 |
 | `lead_hours` | Horas desde el `init_time` hasta el punto medio del intervalo (22,125 a 46,875 en la tabla real) |
 
 ### Bloque `capacity` (4 columnas)
@@ -117,36 +117,37 @@ Hora local de Europe/Berlin del inicio del intervalo: `hour_local` (fraccional, 
 
 ### Meta (11 columnas)
 
-`forecast_issue_date`, `target_date` (D+1 local), `ts_utc`, `closure_utc`, `nwp_init_time`, `available_at_nwp`, `available_at_capacity`, `available_at_calendar`, `n_steps_day` (92/96/100), `capacity_ffilled` y `split_v01`. **`split_v01` es meta, nunca feature**: por `target_date`, `train` sep 2025 – may 2026, `valid` jun – jul 2026, `holdout` ago 2026 en adelante (ADR 0010).
+`forecast_issue_date`, `target_date` (D+1 local), `ts_utc`, `closure_utc`, `nwp_init_time`, `available_at_nwp`, `available_at_capacity`, `available_at_calendar`, `n_steps_day` (92/96/100), `capacity_ffilled` y `split_v01`. **`split_v01` es meta, nunca feature**: por `target_date`, `train` 2024-04-01 – 2024-09-30 (los 6 meses que solo entrenan), `valid` 2024-10-01 – 2026-07-31 (los meses que se validan uno a uno) y `holdout` desde 2026-08-01 (ADR 0010; definición con el histórico completo en `docs/f4-backtest.md` §3). Con la tabla anterior de 410 cierres era `train` sep 2025 – may 2026, `valid` jun – jul 2026.
 
 ## 5. Objetivo (F3.3)
 
-Columnas `y_*`: `y_gen_mw` (= `wind_mw` de ENTSO-E), `y_gen_land_mw`, `y_gen_sea_mw`, `y_cap_mw`, `y_cap_land_mw`, `y_cap_sea_mw` (capacidad MaStR de la **fecha UTC** de `ts_utc`), `y_cf` = generación / capacidad total, `y_cf_land`, `y_cf_sea` y `y_is_gap_filled`. Se conserva la generación en MW para evaluar como Predico. Más allá del último día de MaStR (2026-10-15) se arrastra el último valor y `capacity_ffilled` vale `true` (en la tabla real: 88 filas, las del 16 de octubre UTC del cierre 2026-10-15). Nulos solo donde falta la generación: el cierre 2026-10-15 tiene 38 filas sin generación (ENTSO-E llega hasta el 2026-10-16 12:15 UTC). Nunca se lee el pronóstico del operador; el precio tampoco (ver §9).
+Columnas `y_*`: `y_gen_mw` (= `wind_mw` de ENTSO-E), `y_gen_land_mw`, `y_gen_sea_mw`, `y_cap_mw`, `y_cap_land_mw`, `y_cap_sea_mw` (capacidad MaStR de la **fecha UTC** de `ts_utc`), `y_cf` = generación / capacidad total, `y_cf_land`, `y_cf_sea` y `y_is_gap_filled`. Se conserva la generación en MW para evaluar como Predico. Más allá del último día de MaStR (2026-10-15) se arrastra el último valor y `capacity_ffilled` vale `true` (en la tabla real: 856 filas, las del 16 de octubre UTC del cierre 2026-10-15 y las de los cierres 2026-10-16 a 10-23). Nulos solo donde falta la generación, solo en los últimos cierres: 161 filas, 65 del cierre 2026-10-22 y las 96 del 2026-10-23 (la plata de ENTSO-E llega hasta el 2026-10-23). Nunca se lee el pronóstico del operador; el precio tampoco (ver §9).
 
 ## 6. Tabla oro
 
 | Aspecto | Valor |
 |---|---|
 | Ruta | `data/gold/features` (Delta Lake), una fila por (`forecast_issue_date`, `ts_utc`), clave única |
-| Filas / días | 39 360 / 410 cierres (2025-09-01 … 2026-10-15): 408 días de 96 pasos, 1 de 92 (cierre 2026-03-28) y 1 de 100 (cierre 2025-10-25) |
+| Filas / días | 89 856 / 936 cierres (2024-04-01 … 2026-10-23): 932 días de 96 pasos, 2 de 92 (cierres 2025-03-29 y 2026-03-28) y 2 de 100 (cierres 2024-10-26 y 2025-10-25) |
 | Columnas | 260: 11 meta + 239 features (225 `nwp`, 4 `capacity`, 10 `calendar`) + 10 objetivo |
-| Tamaño en disco | 76 MiB (78,7 MB, un Parquet snappy + `_delta_log`) |
-| Construcción completa | 76–84 s en 4 ejecuciones (≈ 0,2 s por cierre; lectura de los 410 Parquet incluida) |
-| Validación | 2,5 s |
-| Idempotencia | Relanzada 3 veces sin cambios: `written: false`, versión Delta 0 |
+| Tamaño en disco | 171 MiB activos (179 MB, dos Parquet snappy); la carpeta ocupa 248 MiB porque conserva los ficheros de versiones anteriores (`_delta_log`, sin `VACUUM`) |
+| Construcción completa | 112 s para los 936 cierres (≈ 0,12 s por cierre con 32 núcleos; lectura de los 936 Parquet incluida). Con la tabla de 410 cierres eran 76–84 s |
+| Validación | 1,9 s |
+| Idempotencia | Relanzada sin cambios: `written: false`, versión Delta 7 |
+| Versión Delta | 7 (la usan las ejecuciones del backtest de `docs/f4-backtest.md` §8.4) |
 
 ## 7. Validación (`validate.py`, Pandera con backend Polars)
 
 Esquema derivado del registro: tipos; clave única; malla contigua de 15 min por día; `n_steps_day` igual al nº de filas del día y a la ventana de Berlín (92/96/100); rango físico por familia de variable (`RANGES`, con margen); sin NaN ni nulos en features salvo las columnas de racha cuando `gust_missing` = 1; `y_cf*` en [0; 1,1]; `y_cap_*` nunca nulos y `y_cf` nulo si y solo si lo es `y_gen`; `available_at_* < closure_utc`; `nwp_init_time` = D 00:00 UTC; `target_date` = D+1.
 
-Resultado sobre la tabla real: `schema_ok = true`, 0 problemas, 0 NaN en 239 features, `days_by_steps` = {92: 1, 96: 408, 100: 1}, margen mínimo NWP → cierre 270 min, 1 día con objetivo incompleto (2026-10-15, 38 filas). El informe incluye además NaN por columna, mínimos y máximos observados de cada feature y la media de `y_cf` por partición. Observados (resumen): `ws100_all_mean` 0,98–21,7 m/s, `shear_*` 0–0,45, `rho_*` 1,13–1,34, `stab_*` −9,8 a 9,95 °C, `y_cf` máx. 0,72 (tierra 0,76; mar 0,96).
+Resultado sobre la tabla real (936 cierres): `schema_ok = true`, 0 problemas, `days_by_steps` = {92: 2, 96: 932, 100: 2}, margen mínimo NWP → cierre 270 min, 2 días con objetivo incompleto (cierres 2026-10-22 y 10-23: 65 y 96 filas sin generación). NaN solo en las columnas de racha y en 21 700 filas (los 226 cierres con `gust_missing` = 1, ver §3 y §11); 0 NaN en el resto de features. El informe incluye además NaN por columna, mínimos y máximos observados de cada feature y la media de `y_cf` por partición. Observados (resumen): `ws100_all_mean` 0,99–15,2 m/s, `shear_*` 0–0,45, `rho_*` 1,13–1,34, `stab_*` −9,8 a 14,0 °C, `lead_hours` 22,125–46,875.
 
 ### Comprobaciones manuales de sentido (sobre la tabla real)
 
 | Comprobación | Resultado |
 |---|---|
-| Correlación de Pearson con `y_cf` | `wshub_all_mean` **0,938**, `ws100_all_mean` 0,936, `ws100_all_ctrl` 0,934, `pdens_all` 0,882, `v3hub_all_ens` 0,880, `v3_all_ens` 0,874. Por tipo: tierra `wshub_land_mean` vs `y_cf_land` 0,934; mar 0,827. La correlación lineal de v³ es menor que la de la velocidad porque la curva de potencia satura (por encima de ~12 m/s el factor de capacidad deja de crecer con v³) |
-| Media de `y_cf` por partición | train 0,203 (272 días), valid 0,152 (61), holdout 0,181 (77; 7 354 filas con objetivo). El valid (jun–jul) tiene menos viento que train, coherente con `wshub_all_mean`: 6,75, 5,89 y 6,45 m/s |
+| Correlación de Pearson con `y_cf` (936 cierres) | `wshub_all_mean` **0,939**, `ws100_all_mean` 0,938, `ws100_all_ctrl` 0,935, `pdens_all` 0,894, `v3hub_all_ens` 0,893, `v3_all_ens` 0,888. Por tipo: tierra `wshub_land_mean` vs `y_cf_land` 0,936; mar 0,812. Con racha ausente (21 700 filas) la de `wshub_all_mean` es 0,932 y con racha 0,941: sin diferencia relevante. La correlación lineal de v³ es menor que la de la velocidad porque la curva de potencia satura (por encima de ~12 m/s el factor de capacidad deja de crecer con v³) |
+| Media de `y_cf` por partición | train 0,151 (182 días, abr – sep 2024), valid 0,189 (669), holdout 0,184 (85 cierres, 8 160 filas, 7 999 con objetivo). Coherente con `wshub_all_mean`: 5,93, 6,50 y 6,57 m/s (train es primavera y verano, con poco viento) |
 | Un valor a mano | Cierre 2026-03-28, clúster `bb_01`, intervalo 2026-03-29 10:00 UTC: punto medio a +34,125 h; silver `wind_speed_100m_mean` = 5,0786 (+33 h) y 5,9140 (+36 h) → lineal 5,39185 a mano; la tabla oro da 5,39185 (coincide) |
 
 ## 8. Tests anti look-ahead (`tests/leakage/test_leakage_features.py`)
@@ -159,7 +160,7 @@ Con datos sintéticos (fixture `synth` de `tests/conftest.py`: plata NWP mínima
 4. La pasada de D+1 (o la de D−1) no se usa: modificarla o añadirla no cambia las features de D; sin la pasada de D no hay filas de D. El caso contrario (cambiar la de D sí cambia las features) comprueba que el test tiene dientes.
 5. Estático: ningún módulo de `predico50hz.features` importa de `ingest.entsoe` ni contiene `entsoe/forecast`, `entsoe/prices` o los datasets `forecast`/`prices`.
 
-Además, 40 tests unitarios nuevos y 10 de fuga (50 en total) (`tests/unit/test_features_*.py`): tiempos (cierre 13/14 UTC, ventanas, 92/96/100 con las fechas reales), interpolación y racha por tramos con casos a mano, v³ y E[v³], pesos con capacidad que cambia por fecha, densidad, cizalladura con recortes, objetivo y arrastre de capacidad, idempotencia de la escritura con Delta (incluidas columnas NaN y reemplazo por rango) y validación (detecta cf fuera de rango, NaN, duplicados, huecos y `available_at` tardío). La suite completa (`uv run pytest`: 162 tests), `ruff check`, `ruff format --check` y `pyright` (estricto en `src/`) pasan.
+Además, 40 tests unitarios nuevos y 10 de fuga (50 en total) (`tests/unit/test_features_*.py`; con el histórico completo se añadió `test_split_boundaries`, que fija los límites de `train`, `valid` y `holdout`): tiempos (cierre 13/14 UTC, ventanas, 92/96/100 con las fechas reales), interpolación y racha por tramos con casos a mano, v³ y E[v³], pesos con capacidad que cambia por fecha, densidad, cizalladura con recortes, objetivo y arrastre de capacidad, idempotencia de la escritura con Delta (incluidas columnas NaN y reemplazo por rango) y validación (detecta cf fuera de rango, NaN, duplicados, huecos y `available_at` tardío). La suite completa (`uv run pytest`: 162 tests), `ruff check`, `ruff format --check` y `pyright` (estricto en `src/`) pasan.
 
 ## 9. Precio day-ahead: el de D+1 fuera; el de D, candidato (ADR 0031)
 
@@ -183,7 +184,8 @@ El ADR 0009 exige usar el precio solo si su hora de publicación medida es anter
 - **Sin precio** (§9): el de D+1 llega tarde; el de D está pendiente de probar (#29). **Sin festivos.**
 - **E[v³] asume gaussianidad** del ensemble (μ³ + 3μσ²); no la ha contrastado con los 51 miembros (la plata solo guarda estadísticos).
 - **Altura de buje constante por tipo** (119 m y 104 m, ponderadas por potencia hoy); los parques recientes tienen buje más alto y la capacidad histórica tenía otro reparto.
-- **Racha:** el camino con racha ausente (`gust_missing` = 1) solo se ha ejercitado con datos sintéticos; la plata actual (desde 2025-09-01) siempre la trae. Los valores de racha agregados no se han contrastado a mano con la plata real (sí con casos sintéticos).
+- **Racha:** la plata NWP no la trae antes del 2024-11-13 (226 cierres, 21 700 filas, el 24 % de la tabla). El camino con racha ausente se ha comprobado con datos reales: esas filas tienen las columnas `gust_*`/`gustfac_*` en NaN y `gust_missing` = 1, y pasan el esquema Pandera. Decisión: **NaN nativa de LightGBM más `gust_missing`**, sin quitar la variable (con ella o sin ella el error cambia menos del 1 %; `docs/f4-backtest.md` §8.4). Los valores de racha agregados no se han contrastado a mano con la plata real (sí con casos sintéticos). `gust_missing` actúa de indicador de época; un modelo lo podría usar de atajo, aunque su ganancia es ≈ 0.
 - **Interpolación:** el efecto de lineal frente a PCHIP sobre el error final del modelo no se ha medido; la comprobación empírica es 6 h → 3 h (§3).
-- **Las pasadas de la etapa 3 (1 abr 2024 – 31 ago 2025) aún no están** en la plata: la tabla cubre solo los 410 cierres de la etapa 2. Se amplía lanzando de nuevo el CLI.
-- Esta capa aún no se ha usado con un modelo (F4 y siguientes no existen todavía).
+- **Cobertura:** la tabla cubre del 2024-04-01 al 2026-10-23 sin huecos (936 cierres, #26). Las pasadas del histórico (etapas 2 y 3) se validaron en bronce y plata (#24, #25). Los dos cierres más recientes tienen objetivo incompleto (la generación de ENTSO-E aún no llega).
+- **Capacidad MaStR del histórico largo:** la capacidad de 2024 también viene del export del 2026-10-15, con el mismo problema de altas registradas a posteriori (más años atrás, más probabilidad de que falten bajas o altas tardías); no se ha medido.
+- Se usa ya con LightGBM v0.1 (`docs/f4-backtest.md` §8.4).

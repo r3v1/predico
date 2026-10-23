@@ -19,11 +19,13 @@ defecto** (`DEFAULT_EXCLUDE`): en validación mejoró solo un 0,6 % y no de form
 """
 
 import datetime as dt
+from pathlib import Path
 from typing import Any, ClassVar
 
 import lightgbm as lgb
 import numpy as np
 import polars as pl
+import yaml
 
 from predico50hz.features.registry import META, TARGETS
 from predico50hz.models.base import Array, Model, Prediction
@@ -33,6 +35,28 @@ QUANTILES: dict[str, float] = {"q10": 0.1, "q50": 0.5, "q90": 0.9}
 EXCLUDED = {*META, *TARGETS}
 # Bloques de variables fuera del modelo por defecto (ablación, ADR 0031 y #29).
 DEFAULT_EXCLUDE: tuple[str, ...] = ("price_",)
+# Hiperparámetros optimizados con Optuna (#32, ADR 0015): un conjunto por cuantil, versionado.
+TUNED_PATH = Path(__file__).resolve().parents[3] / "config" / "lgbm_tuned.yaml"
+# Claves que Optuna puede fijar por cuantil (el resto del modelo no cambia).
+TUNABLE: tuple[str, ...] = (
+    "num_leaves",
+    "learning_rate",
+    "min_data_in_leaf",
+    "feature_fraction",
+    "bagging_fraction",
+    "lambda_l1",
+    "lambda_l2",
+)
+
+
+def load_tuned_params(path: Path = TUNED_PATH) -> dict[str, dict[str, Any]]:
+    """Hiperparámetros por cuantil (`q10`, `q50`, `q90`) de `config/lgbm_tuned.yaml`."""
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    out: dict[str, dict[str, Any]] = {q: dict(v) for q, v in data["quantiles"].items()}
+    for q, hp in out.items():
+        if q not in QUANTILES or not set(hp) <= set(TUNABLE):
+            raise ValueError(f"{path}: parámetros no válidos para {q!r}: {sorted(hp)}")
+    return out
 
 
 def feature_columns(df: pl.DataFrame, exclude_prefixes: tuple[str, ...] = ()) -> list[str]:
@@ -80,6 +104,7 @@ class LightGBM(Model):
         min_data_in_leaf: int = 200,
         feature_fraction: float = 0.5,
         bagging_fraction: float = 0.8,
+        lambda_l1: float = 0.0,
         lambda_l2: float = 1.0,
         max_rounds: int = 1500,
         early_stopping_rounds: int = 50,
@@ -87,13 +112,19 @@ class LightGBM(Model):
         es_min_days: int = 7,
         seed: int = 42,
         exclude_prefixes: list[str] | None = None,
+        quantile_params: dict[str, dict[str, Any]] | None = None,
+        num_threads: int | None = None,
     ) -> None:
+        # `quantile_params` pisa los hiperparámetros de un cuantil (Optuna da uno por cuantil).
+        self.quantile_params: dict[str, dict[str, Any]] = quantile_params or {}
+        self.num_threads = num_threads
         self.hp: dict[str, Any] = {
             "learning_rate": learning_rate,
             "num_leaves": num_leaves,
             "min_data_in_leaf": min_data_in_leaf,
             "feature_fraction": feature_fraction,
             "bagging_fraction": bagging_fraction,
+            "lambda_l1": lambda_l1,
             "lambda_l2": lambda_l2,
             "max_rounds": max_rounds,
             "early_stopping_rounds": early_stopping_rounds,
@@ -117,27 +148,35 @@ class LightGBM(Model):
             **self.hp,
             "objectives": {"q50": "regression", "q10": "quantile", "q90": "quantile"},
             "alphas": {"q10": 0.1, "q90": 0.9},
+            "quantile_params": self.quantile_params,
             "deterministic": True,
         }
 
+    def _hp_for(self, q: str) -> dict[str, Any]:
+        return {**self.hp, **self.quantile_params.get(q, {})}
+
     def _lgb_params(self, q: str, alpha: float) -> dict[str, Any]:
+        hp = self._hp_for(q)
         p: dict[str, Any] = {
             "objective": "regression" if q == "q50" else "quantile",
             "metric": "l2" if q == "q50" else "quantile",
-            "learning_rate": self.hp["learning_rate"],
-            "num_leaves": self.hp["num_leaves"],
-            "min_data_in_leaf": self.hp["min_data_in_leaf"],
-            "feature_fraction": self.hp["feature_fraction"],
-            "bagging_fraction": self.hp["bagging_fraction"],
+            "learning_rate": hp["learning_rate"],
+            "num_leaves": hp["num_leaves"],
+            "min_data_in_leaf": hp["min_data_in_leaf"],
+            "feature_fraction": hp["feature_fraction"],
+            "bagging_fraction": hp["bagging_fraction"],
             "bagging_freq": 1,
-            "lambda_l2": self.hp["lambda_l2"],
-            "seed": self.hp["seed"],
+            "lambda_l1": hp["lambda_l1"],
+            "lambda_l2": hp["lambda_l2"],
+            "seed": hp["seed"],
             "deterministic": True,
             "force_row_wise": True,
             "verbosity": -1,
         }
         if q != "q50":
             p["alpha"] = alpha
+        if self.num_threads is not None:
+            p["num_threads"] = self.num_threads
         return p
 
     def fit(self, train: pl.DataFrame) -> None:
@@ -150,14 +189,15 @@ class LightGBM(Model):
         x_es, y_es = _matrix(es_df, self._cols), es_df["y_cf"].to_numpy()
         self._boosters, self._info, self._importance = {}, [], []
         for q, alpha in QUANTILES.items():
+            hp = self._hp_for(q)
             d_fit = lgb.Dataset(x_fit, y_fit, feature_name=self._cols)
             d_es = lgb.Dataset(x_es, y_es, reference=d_fit)
             booster = lgb.train(  # pyright: ignore[reportUnknownMemberType]
                 self._lgb_params(q, alpha),
                 d_fit,
-                num_boost_round=self.hp["max_rounds"],
+                num_boost_round=hp["max_rounds"],
                 valid_sets=[d_es],
-                callbacks=[lgb.early_stopping(self.hp["early_stopping_rounds"], verbose=False)],
+                callbacks=[lgb.early_stopping(hp["early_stopping_rounds"], verbose=False)],
             )
             self._boosters[q] = booster
             self._info.append(
@@ -226,3 +266,31 @@ class LightGBMCQR(LightGBM):
 
     def params(self) -> dict[str, Any]:
         return {**super().params(), "cqr": self._cqr.as_dict()}
+
+
+def _tuned_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Pone los hiperparámetros optimizados salvo que quien llama dé los suyos."""
+    out = dict(kwargs)
+    if out.get("quantile_params") is None:
+        out["quantile_params"] = load_tuned_params()
+    return out
+
+
+class LightGBMTuned(LightGBM):
+    """LightGBM con los hiperparámetros por cuantil de `config/lgbm_tuned.yaml` (#32)."""
+
+    name: ClassVar[str] = "lgbm_tuned"
+    label: ClassVar[str] = "Modelo de árboles LightGBM optimizado (Optuna)"
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**_tuned_kwargs(kwargs))
+
+
+class LightGBMTunedCQR(LightGBMCQR):
+    """`lgbm_tuned` más calibración conformal (CQR), igual que `lgbm_cqr`."""
+
+    name: ClassVar[str] = "lgbm_tuned_cqr"
+    label: ClassVar[str] = "Modelo de árboles LightGBM optimizado con calibración conformal (CQR)"
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**_tuned_kwargs(kwargs))

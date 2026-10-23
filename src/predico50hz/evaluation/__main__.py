@@ -3,6 +3,8 @@
 - `run --model <nombre> [--holdout]`: ejecuta un modelo (validación walk-forward o, de forma
   explícita y registrada, el periodo reservado).
 - `mlflow-sync`: registra en MLflow (`data/mlflow`) las ejecuciones ya guardadas en disco.
+- `tune --quantile q50 --trials N`: estudio de Optuna de un cuantil (#32, `models/tuning.py`).
+- `tune-export`: escribe el mejor intento de cada estudio en `config/lgbm_tuned.yaml`.
 - `compare`: tabla de clasificación de las últimas ejecuciones de cada modelo.
 - `report`: `scorecard.json` y gráficos para negocio en `data/backtest/report/`.
 """
@@ -110,16 +112,70 @@ def _cmd_mlflow_sync(a: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_tune(a: argparse.Namespace) -> int:
+    from predico50hz.models import tuning  # noqa: PLC0415 (Optuna es lento de importar)
+
+    study = tuning.run_study(
+        a.quantile,
+        a.trials,
+        workers=a.workers,
+        db=a.db,
+        prefix=a.prefix,
+        gold=a.gold,
+        folds=a.folds,
+        min_train_months=a.min_train_months,
+        num_threads=a.threads,
+        space=a.space,
+        mlflow_uri=a.mlflow_uri if a.mlflow else None,
+    )
+    s = tuning.summarize_study(study)
+    print(f"estudio {s['study']}: {s['counts']}")
+    print(
+        f"  intento 0 (v0.1): {_fmt(s['baseline_value'], 2)} MW   mejor (nº {s['best_number']}): "
+        f"{_fmt(s['best_value'], 2)} MW"
+    )
+    print(f"  mejores parámetros: {json.dumps(s['best_params'], ensure_ascii=False)}")
+    print(f"  importancia: {json.dumps(s['importance'], ensure_ascii=False)}")
+    return 0
+
+
+def _cmd_tune_export(a: argparse.Namespace) -> int:
+    from predico50hz.models import tuning  # noqa: PLC0415
+
+    best = tuning.export_params(a.db, a.out, prefix=a.prefix, note=a.note)
+    print(f"{a.out}: {json.dumps(best, ensure_ascii=False)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("run", "compare", "report", "mlflow-sync"):
+    for name in ("run", "compare", "report", "mlflow-sync", "tune", "tune-export"):
         p = sub.add_parser(name)
         p.add_argument("--root", default=DEFAULT_ROOT, help="carpeta de salida (data/backtest)")
-        if name in {"run", "mlflow-sync"}:
+        if name in {"run", "mlflow-sync", "tune"}:
             p.add_argument("--mlflow-uri", default=DEFAULT_TRACKING_URI, help="tracking URI")
-        if name in {"run", "report"}:
+        if name in {"run", "report", "tune"}:
             p.add_argument("--gold", default=DEFAULT_GOLD)
+        if name in {"tune", "tune-export"}:
+            p.add_argument("--db", default="data/optuna/predico.db", help="SQLite de Optuna")
+            p.add_argument("--prefix", default="lgbm", help="prefijo del nombre del estudio")
+        if name == "tune":
+            p.add_argument("--quantile", required=True, choices=["q50", "q10", "q90"])
+            p.add_argument("--trials", type=int, default=150, help="intentos nuevos (150 a 300)")
+            p.add_argument("--workers", type=int, default=24, help="procesos de Optuna")
+            p.add_argument("--threads", type=int, default=1, help="hilos de LightGBM por proceso")
+            p.add_argument(
+                "--folds", default="even", help="all | even | odd | índices separados por comas"
+            )
+            p.add_argument(
+                "--space", default="adr", choices=["adr", "wide"], help="espacio de búsqueda"
+            )
+            p.add_argument("--mlflow", action="store_true", help="registrar el estudio en MLflow")
+            p.add_argument("--min-train-months", type=int, default=fl.DEFAULT_MIN_TRAIN_MONTHS)
+        if name == "tune-export":
+            p.add_argument("--out", default="config/lgbm_tuned.yaml")
+            p.add_argument("--note", default="")
         if name == "run":
             p.add_argument("--model", required=True, choices=sorted(MODELS))
             p.add_argument("--mlflow", action="store_true", help="registrar también en MLflow")
@@ -138,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
         "compare": _cmd_compare,
         "report": _cmd_report,
         "mlflow-sync": _cmd_mlflow_sync,
+        "tune": _cmd_tune,
+        "tune-export": _cmd_tune_export,
     }[a.cmd](a)
 
 

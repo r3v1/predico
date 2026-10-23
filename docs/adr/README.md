@@ -20,7 +20,7 @@ Las tareas pendientes están en los [issues](https://github.com/r3v1/predico/iss
 | [0012](0012-interpolacion-temporal.md) | Interpolación temporal de 3 h a 15 min | aceptada |
 | [0013](0013-serie-objetivo-entsoe.md) | Serie objetivo: generación de ENTSO-E reconstruida como Predico | aceptada |
 | [0014](0014-cuantiles-y-calibracion-conformal.md) | Cuantiles: Q50 con pérdida cuadrática, Q10/Q90 cuantílicos y calibración conformal | aceptada |
-| [0015](0015-optimizacion-con-optuna.md) | Optimización de hiperparámetros con Optuna y control de sobreajuste | aceptada |
+| [0015](0015-optimizacion-con-optuna.md) | Optimización de hiperparámetros con Optuna y control de sobreajuste | aceptada (espacio del Q50 enmendado por 0033) |
 | [0016](0016-modelos-fundacionales.md) | Criterios para adoptar modelos fundacionales de series temporales | aceptada |
 | [0017](0017-referencias-y-operador-como-benchmark.md) | Cuatro referencias de comparación; el operador solo como benchmark | aceptada |
 | [0018](0018-archivo-diario-de-entsoe.md) | Archivo diario de las versiones publicadas por ENTSO-E | aceptada |
@@ -38,6 +38,7 @@ Las tareas pendientes están en los [issues](https://github.com/r3v1/predico/iss
 | [0030](0030-persistencia-con-margen-de-publicacion.md) | Persistencia con un margen de publicación de 180 min | aceptada |
 | [0031](0031-precio-day-ahead-solo-del-dia-del-cierre.md) | Precio day-ahead: el de D+1 no entra; el de D, como candidato | aceptada |
 | [0032](0032-particion-con-el-historico-completo.md) | Partición y pliegues con el histórico completo | aceptada |
+| [0033](0033-espacio-de-busqueda-ampliado-para-el-q50.md) | Espacio de búsqueda ampliado para el Q50 | aceptada |
 
 ## Plantilla
 

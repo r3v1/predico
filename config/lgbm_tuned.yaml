@@ -1,0 +1,48 @@
+# Hiperparámetros de LightGBM optimizados con Optuna (#32, ADR 0015), uno por cuantil.
+# Los lee `models.lgbm.load_tuned_params` (modelos `lgbm_tuned` y `lgbm_tuned_cqr`).
+# Se regeneran con `python -m predico50hz.evaluation tune-export`. Ojo: el Q50 viene de `lgbm-wide-q50` (ADR 0033); `tune-export` lo reescribiría con `lgbm-q50`.
+note: 'Mejor intento de cada estudio de Optuna (pliegues pares 0,2,...,20 de la validación).
+  Q10 y Q90: espacio del ADR 0015, 150 intentos. Q50: espacio ampliado del ADR 0033
+  (num_leaves 4-255, feature_fraction 0,2-1), estudio lgbm-wide-q50. Ver docs/f4-backtest.md
+  §8.6.'
+studies:
+  q10:
+    study: lgbm-q10
+    trial: 87
+    objective_mw: 167.471
+    baseline_mw: 172.227
+  q50:
+    study: lgbm-wide-q50
+    trial: 115
+    objective_mw: 1031.634
+    baseline_mw: 1050.624
+  q90:
+    study: lgbm-q90
+    trial: 89
+    objective_mw: 176.661
+    baseline_mw: 178.334
+quantiles:
+  q10:
+    num_leaves: 242
+    learning_rate: 0.015559249481082863
+    min_data_in_leaf: 410
+    feature_fraction: 0.5356975043856985
+    bagging_fraction: 0.7800355871035694
+    lambda_l1: 0.002698595233421275
+    lambda_l2: 0.007867708687742907
+  q50:
+    num_leaves: 46
+    learning_rate: 0.011041442544205658
+    min_data_in_leaf: 86
+    feature_fraction: 0.2466767283362483
+    bagging_fraction: 0.6901115053318574
+    lambda_l1: 0.0018458195086520468
+    lambda_l2: 0.08013251092367
+  q90:
+    num_leaves: 15
+    learning_rate: 0.0760825200684851
+    min_data_in_leaf: 184
+    feature_fraction: 0.5469235424701353
+    bagging_fraction: 0.944176357847483
+    lambda_l1: 0.0010772331625480986
+    lambda_l2: 6.5460505910031115

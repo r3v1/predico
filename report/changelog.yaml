@@ -2,6 +2,17 @@
 # añadir una entrada NUEVA ARRIBA (la primera es la más reciente). Texto llano, sin jerga.
 # Campos: version, date (AAAA-MM-DD), title, items (lista de frases cortas).
 entries:
+  - version: "0.15"
+    date: 2026-10-23
+    title: Ajustar el modelo de árboles apenas lo mejora
+    items:
+      - "Se han probado hasta 150 combinaciones de ajustes (las claramente malas se descartan a medias) del modelo de árboles para cada una de sus tres salidas (la central y los dos extremos del rango). Cada combinación se evaluó mes a mes, solo con datos anteriores a cada mes."
+      - "El error del modelo baja de 1.061 a 1.055 MW en los 22 meses evaluados, un 0,6 %. El operador sigue en 877 MW: el modelo se equivoca un 20 % más que él, antes un 21 %."
+      - "Los ajustes se eligieron mirando 11 de los 22 meses. En esos 11 el error baja un 1,2 %, pero en los otros 11, que no se usaron para elegir, no baja nada (sube un 0,1 %). La mejora real, por tanto, es muy pequeña."
+      - "Una prueba aparte con un abanico de ajustes más amplio, solo para la salida central, baja el error un 1,9 % (a 1.041 MW) y la mejora se mantiene en los meses no usados para elegir (1,5 %). Sigue lejos del operador."
+      - "Nos quedamos con esa versión del abanico amplio para la salida central: el modelo ajustado se equivoca 1.041 MW, un 19 % más que el operador."
+      - "El rango calibrado sigue acertando el 79,4 % del tiempo, dentro de la banda exigida."
+      - "Conclusión: con este ajuste no se alcanza al operador. Hay que buscar la mejora en los datos o en el modelo, no en el ajuste. El periodo reservado, que es la prueba definitiva, sigue sin mirarse."
   - version: "0.14"
     date: 2026-10-23
     title: El precio del día del cierre apenas ayuda

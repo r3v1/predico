@@ -323,12 +323,14 @@ def test_backtest_metrics_are_complete_and_reasonable(runs: dict[str, RunRecord]
 
 
 def test_scorecard_and_leaderboard_over_all_runs(chain: Chain, runs: dict[str, RunRecord]) -> None:
-    assert {r["model"] for r in load_runs(chain.backtest)} == set(MODELS)
+    # Los modelos optimizados (lgbm_tuned*) se prueban aparte: usan `config/lgbm_tuned.yaml`.
+    tested = {m for m in MODELS if not m.startswith("lgbm_tuned")}
+    assert {r["model"] for r in load_runs(chain.backtest)} == tested
     lb = pl.read_parquet(chain.backtest / "leaderboard.parquet")
     assert lb.height == len(runs)
     card = scorecard.build_scorecard(chain.backtest)
     by = {m["model"]: m for m in card["models"]}
-    assert set(by) == set(MODELS)
+    assert set(by) == tested
     lgbm = by["lgbm"]
     assert lgbm["validation"]["rmse"] == pytest.approx(runs["lgbm"].metrics["total"]["rmse"])
     assert lgbm["validation"]["verdict"] in {"mejora", "igual", "empeora"}

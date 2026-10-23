@@ -10,6 +10,9 @@ uv run python -m predico50hz.evaluation run --model power_curve
 uv run python -m predico50hz.evaluation run --model operator
 uv run python -m predico50hz.evaluation run --model persistence       # repetir lo último conocido (§8.3)
 uv run python -m predico50hz.evaluation run --model lgbm_cqr           # LightGBM + calibración conformal (§8.2)
+uv run python -m predico50hz.evaluation run --model lgbm_tuned_cqr    # LightGBM optimizado con Optuna + CQR (§8.6)
+uv run python -m predico50hz.evaluation tune --quantile q50 --trials 150 --workers 24 --folds even --mlflow   # estudio de Optuna (§8.6)
+uv run python -m predico50hz.evaluation tune-export                     # mejores intentos → config/lgbm_tuned.yaml  (ojo: reescribe el Q50 con el estudio `lgbm-q50`; el adoptado es `lgbm-wide-q50`, ADR 0033)
 uv run python -m predico50hz.evaluation run --model power_curve --holdout   # periodo reservado (queda registrado)
 uv run python -m predico50hz.evaluation compare                         # clasificación de las últimas ejecuciones
 uv run python -m predico50hz.evaluation report                          # scorecard.json + PNG
@@ -29,6 +32,7 @@ Opciones de `run`: `--min-train-months N` (6 por defecto), `--param clave=valor`
 | `models/base.py` | Interfaz `Model` / `Prediction` |
 | `models/baselines.py` | `climatology`, `power_curve`, `operator`, `persistence` |
 | `models/cqr.py` | Calibración conformal (CQR) de Q10 y Q90; la usa `lgbm_cqr` (§8.2) |
+| `models/tuning.py` | Estudios de Optuna por cuantil, poda y exportación (§8.6); `config/lgbm_tuned.yaml` guarda los mejores parámetros |
 | `report/backtest.py` | Capítulo del informe ejecutivo |
 
 ## 2. Métricas (todas en MW, sobre cuartos de hora)
@@ -310,6 +314,101 @@ Las dos de «sin precio» reproducen bit a bit las de §8.4 (`20261023T163749Z-l
 - **Días con precio negativo.** Precio de D con horas negativas (17 284 filas): 1 176,5 → 1 166,9 MW (−0,8 %). Día objetivo con horas negativas (solo análisis; el precio de D+1 no es variable; 17 276 filas): 1 189,4 → 1 185,3 MW (−0,3 %). Sin horas negativas: 1 009,4 → 1 001,8 MW (−0,8 %). El bloque no ayuda más en los días de curtailment que en los demás; esos días son los de más error en los dos casos.
 - **Decisión:** no mejora de forma clara (dentro del ruido) → excluido del modelo por defecto (`models/lgbm.py::DEFAULT_EXCLUDE`). Las ejecuciones por defecto son las de siempre (`20261023T172307Z-lgbm-validation`, `20261023T172311Z-lgbm_cqr-validation`, mismas cifras que sin precio) y el scorecard las refleja; su `trend` compara con la ejecución con precio y dice «igual» (−0,6 %). Se activa con `--param 'exclude_prefixes=[]'`.
 
+### 8.6 Optimización con Optuna: hiperparámetros por cuantil (ejecución del 2026-10-23, tabla oro versión Delta 8)
+
+Tarea #32 (ADR 0015). Se optimizó LightGBM con Optuna y se evaluó con la misma validación de 22 pliegues (64 224 filas, 669 días, oct 2024 – jul 2026). El periodo reservado no se ha evaluado ni ha entrado en la optimización (`tests/leakage/test_tuning_leakage.py`).
+
+**Resultado en una línea.** Optimizar los hiperparámetros apenas mejora el modelo: el RMSE del Q50 baja de 1 060,8 a 1 054,6 MW (−0,6 %) y el operador sigue en 876,6 MW (+20,3 % frente a +21,0 % antes). En los pliegues que Optuna no vio la mejora es nula (+0,1 %). Los valores por defecto de la v0.1 ya estaban cerca del óptimo; la brecha con el operador no se cierra por esta vía.
+
+**Método.** Código en `models/tuning.py`, órdenes en §1.
+
+- **Un estudio por cuantil** (`lgbm-q50`, `lgbm-q10`, `lgbm-q90`), en un solo SQLite (`data/optuna/predico.db`, ignorado por git). Muestreador TPE multivariante con semilla 42 (+ nº de proceso) y `constant_liar` (varios procesos a la vez), 20 intentos aleatorios iniciales, poda por mediana (`MedianPruner`, sin podar antes de 20 intentos completos ni de 2 pliegues).
+- **Espacio exacto del ADR 0015:** `num_leaves` 15–255, `learning_rate` 0,01–0,1 (log), `min_data_in_leaf` 20–500, `feature_fraction` y `bagging_fraction` 0,5–1, `lambda_l1` y `lambda_l2` 10⁻³–10 (log). Hasta 2 000 rondas con paciencia 50.
+- **Número de árboles** por la parada temprana que ya usaba el modelo (último 15 % de los días del propio entrenamiento, nunca el pliegue de validación): sin mirar al futuro.
+- **Objetivo:** media, sobre los pliegues de optimización, de una métrica en MW. Q50: RMSE (la métrica de G1). Q10 y Q90: pérdida cuantílica del propio cuantil. Se eligió ésta y no el Winkler tras CQR porque deja cada estudio independiente (el Winkler necesita Q10 y Q90 a la vez y la CQR encadena pliegues) y es la pérdida con la que se entrena cada cuantil; la CQR corrige la cobertura después. Tras cada pliegue se informa la media acumulada, y la poda corta los intentos que van peor que la mediana.
+- **Intento 0 de cada estudio = la v0.1** (hojas 15, tasa 0,03, mínimo 200, variables 0,5, filas 0,8, L1 0,001, L2 1), para medirla con el mismo criterio. `lambda_l1` de la v0.1 es 0 y en el espacio es ≥ 0,001; la diferencia no se nota.
+- **Registro:** cada estudio es un run padre de MLflow (experimento `predico50hz-optuna`, `file:data/mlflow`) con los mejores parámetros, la importancia y las cuentas de intentos, y **cada intento un run hijo anidado** (hiperparámetros, `fold_value_mw` y `fold_trees` con `step` = nº de pliegue, `running_mean_mw`, etiqueta `trial_state` completado/podado). Un callback de Optuna lo escribe al terminar cada intento, en directo, sin frenar el estudio. Los estudios de esta sección se lanzaron antes y se volcaron después con `tuning.log_mlflow` (run padre con etiqueta `backfill`); los runs planos anteriores se quedan. El SQLite sirve para Optuna Dashboard (`uvx optuna-dashboard sqlite:///data/optuna/predico.db`; no probado). Ids de los runs: q50 `09df1800272d483286ba72bd5581d586`, q10 `253d864e5f18410b9f2c730104ff81b5`, q90 `9ba728541eb440e9984f4ae17f9489f5`.
+- **Mejores parámetros** en `config/lgbm_tuned.yaml` (versionado). Los modelos `lgbm_tuned` y `lgbm_tuned_cqr` lo cargan (un conjunto por cuantil, `quantile_params`); `lgbm` y `lgbm_cqr` no cambian (reproducen bit a bit las cifras de §8.4: 1 060,8 MW).
+
+**Presupuesto y tiempos.** Los 150 intentos × 22 pliegues completos (~10 h en serie) no cabían. Se hizo así:
+
+1. Cada intento entrena un solo cuantil con **1 hilo**, y se lanzan **24 procesos** sobre el mismo SQLite (con ~90 000 filas, un hilo por proceso rinde mucho más que 32 hilos en un modelo; en un pliegue grande 1 hilo tarda 6,8 s y 32 hilos 2,7 s). El SQLite va en modo WAL con espera larga.
+2. **Pliegues alternos:** se optimiza solo con los 11 pliegues pares (oct 2024, dic, feb, abr, jun, ago, oct 2025, dic, feb 2026, abr, jun) y los 11 impares (nov 2024, ene 2025, mar, may, jul, sep, nov, ene 2026, mar, may, jul) quedan sin usar. Cada mitad contiene un invierno entero de cada año.
+3. Poda por pliegue.
+
+Con esto cada estudio de 150 intentos tardó de 16 a 29 minutos de reloj y **todo el trabajo (3 estudios, estudio exploratorio, 4 evaluaciones completas) unas 2 h**, frente a las 4–5 h previstas, así que **no hubo que recortar a 50 intentos** (ADR 0006). Intentos por estudio:
+
+| Estudio | Intentos | Completos | Podados | Tiempo | Intento 0 (v0.1) | Mejor | Cambio |
+|---|---|---|---|---|---|---|---|
+| Q50 (RMSE, MW) | 150 | 130 | 20 | 23 min | 1 050,6 | 1 040,7 (nº 123) | −0,9 % |
+| Q10 (pinball, MW) | 150 | 88 | 62 | 25 + 4 min | 172,2 | 167,5 (nº 87) | −2,8 % |
+| Q90 (pinball, MW) | 150 | 83 | 67 | 16 min | 178,3 | 176,7 (nº 89) | −0,9 % |
+
+Incidente: en Q10 dos procesos se pararon con «Cannot tell a COMPLETE trial». La causa: dos procesos sacaron a la vez el intento encolado (la v0.1), los dos lo entrenaron y el segundo falló al cerrarlo. Se lanzaron 12 intentos más para llegar a 150 y el código se corrigió (solo el proceso 0 toma la v0.1 y los demás esperan a que empiece; lo cubre un test); en el estudio exploratorio, lanzado con una versión intermedia que ignoraba el error, se perdió un intento (149). Los estudios Q50 y Q90 salieron con 150 y el intento 0 está completo en los cuatro. Las cifras de la tabla son de la media por pliegue en los 11 pliegues de optimización (media de RMSE por pliegue, no RMSE conjunto).
+
+**Mejores parámetros** (`config/lgbm_tuned.yaml`):
+
+| Parámetro | Q10 | Q50 | Q90 | v0.1 |
+|---|---|---|---|---|
+| `num_leaves` | 242 | 21 | 15 | 15 |
+| `learning_rate` | 0,0156 | 0,0353 | 0,0761 | 0,03 |
+| `min_data_in_leaf` | 410 | 212 | 184 | 200 |
+| `feature_fraction` | 0,536 | 0,522 | 0,547 | 0,5 |
+| `bagging_fraction` | 0,780 | 0,818 | 0,944 | 0,8 |
+| `lambda_l1` | 0,0027 | 0,0015 | 0,0011 | 0 |
+| `lambda_l2` | 0,0079 | 0,0326 | 6,55 | 1 |
+
+**Importancia de hiperparámetros** (PED-ANOVA de `optuna.importance`, que no necesita scikit-learn; no se usó Optuna Dashboard). Suma 1 por estudio:
+
+| Parámetro | Q50 | Q10 | Q90 |
+|---|---|---|---|
+| `num_leaves` | 0,30 | 0,09 | 0,24 |
+| `feature_fraction` | 0,30 | 0,22 | 0,07 |
+| `learning_rate` | 0,10 | 0,24 | 0,35 |
+| `lambda_l1` | 0,13 | 0,03 | 0,12 |
+| `bagging_fraction` | 0,08 | 0,12 | 0,18 |
+| `lambda_l2` | 0,06 | 0,07 | 0,02 |
+| `min_data_in_leaf` | 0,02 | 0,24 | 0,03 |
+
+En el Q50 pesan el tamaño de los árboles y la fracción de variables; en los extremos, la tasa de aprendizaje y el mínimo de filas por hoja. Los mejores del Q50 y el Q90 quedan en el borde del espacio (hojas 21 y 15, variables ≈ 0,52–0,55): el óptimo parece estar fuera, hacia árboles más pequeños y menos variables por árbol. Además la mediana de los intentos completos del Q50 (1 051,1 MW) es igual que la v0.1 (1 050,6): el terreno es plano. En el Q90 la mediana (180,9) es peor que la v0.1 (178,3).
+
+**Resultados (validación completa, 22 pliegues).** Ejecuciones (`--mlflow`): v0.1 `20261023T193004Z-lgbm-validation` y `20261023T172311Z-lgbm_cqr-validation`; optimizado `20261023T191340Z-lgbm_tuned-validation` y `20261023T191954Z-lgbm_tuned_cqr-validation`.
+
+| Conjunto de filas | Modelo | RMSE Q50 (MW) | Winkler sin CQR | Cobertura sin CQR | Winkler con CQR | Cobertura con CQR |
+|---|---|---|---|---|---|---|
+| **Todo (22 pliegues, 64 224 filas)** | v0.1 | 1 060,8 | 3 450,6 | 71,2 % | 3 396,5 | 79,5 % |
+| | optimizado | **1 054,6** (−0,6 %) | **3 444,2** | 70,6 % | **3 387,5** | 79,4 % |
+| | operador | 876,6 | — | — | — | — |
+| **Pliegues usados para optimizar (pares, 31 784 filas)** | v0.1 | 1 085,1 | 3 502,2 | 70,4 % | 3 428,6 | 78,6 % |
+| | optimizado | **1 071,6** (−1,2 %) | **3 438,5** | 70,2 % | **3 377,3** | 79,2 % |
+| | operador | 900,6 | — | — | — | — |
+| **Pliegues no usados (impares, 32 440 filas)** | v0.1 | **1 036,5** | **3 400,1** | 72,0 % | **3 365,0** | 80,5 % |
+| | optimizado | 1 037,7 (+0,1 %) | 3 449,8 | 71,0 % | 3 397,5 | 79,6 % |
+| | operador | 852,3 | — | — | — | — |
+| **Invierno 2024/25 (dic–feb, 8 640 filas)** | v0.1 | **1 187,8** | 4 130,1 | 67,8 % | 4 008,5 | 80,7 % |
+| | optimizado | 1 194,7 (+0,6 %) | **3 976,7** | 69,1 % | **3 898,7** | 80,5 % |
+| | operador | 901,5 | — | — | — | — |
+| **Invierno 2025/26 (dic–feb, 8 640 filas)** | v0.1 | 1 196,7 | **4 111,5** | 65,2 % | **3 932,6** | 74,5 % |
+| | optimizado | **1 188,5** (−0,7 %) | 4 127,8 | 65,7 % | 3 936,0 | 77,1 % |
+| | operador | 922,1 | — | — | — | — |
+
+Otras cifras del total: el RMSE del optimizado mejora en 15 de los 22 pliegues (9 de 11 pares, 6 de 11 impares); días mejores que el operador 26,8 % (v0.1: 25,6 %); sesgo −22,9 MW (v0.1: −19,3). Pérdida cuantílica en los 22 pliegues: Q10 165,2 frente a 167,0 MW (−1,1 %) y **Q90 179,2 frente a 178,0 (+0,7 %: empeora fuera de los pliegues de optimización)**. Cuantiles con CQR: ancho medio 2 331 MW (v0.1: 2 310).
+
+**Sesgo de selección (importante).** Las cifras de los pliegues pares son optimistas: se eligieron los parámetros que mejor les iban. La mejora de «−1,2 %» en ellos se reduce a «+0,1 %» en los impares: **la mejora real en validación es del orden de cero y la cifra de −0,6 % del total mezcla ambas cosas**. Aun así los impares no son una comprobación independiente: sus meses están dentro del entrenamiento de los pliegues pares posteriores y al revés, y los parámetros salen de los mismos 30 meses. La comprobación de verdad es el periodo reservado (#33 y #34), que no se ha mirado. El Winkler con CQR también mejora en los pares (−1,5 %) y empeora en los impares (+1,0 %). Para el criterio de aceptación de #32 («mejora sobre la v0.1 en validación»): se cumple en el total (−0,6 % de RMSE, −0,3 % de Winkler con CQR) pero no en los pliegues sin usar.
+
+**Estudio exploratorio con espacio ampliado (Q50, no es el modelo registrado).** Como el óptimo estaba en el borde, se repitió el estudio del Q50 con `num_leaves` 4–255 y `feature_fraction` 0,2–1 (el resto igual; estudio `lgbm-wide-q50`, 149 intentos: 123 completos y 26 podados, 18 min, run MLflow `214612e314d4489c9030f35b9f62ec0c`). Mejor intento (nº 115): hojas 46, tasa 0,0110, mínimo 86, variables 0,247, filas 0,690, L1 0,0018, L2 0,080; media de 11 pliegues pares 1 031,6 MW frente a 1 050,6 (−1,8 %). Importancia: `feature_fraction` 0,41, `learning_rate` 0,16, `lambda_l1` 0,16, `min_data_in_leaf` 0,12, `num_leaves` 0,08, `bagging_fraction` 0,04, `lambda_l2` 0,03. Se evaluó con los 22 pliegues sustituyendo solo los parámetros del Q50 (el resto como v0.1; ejecución `20261023T192606Z-lgbm-validation`, lanzada con `--param 'quantile_params={"q50":{...}}'`): **RMSE total 1 041,0 MW (−1,9 %; operador +18,8 %)**, pares 1 060,5 (−2,3 %), **impares 1 021,5 (−1,5 %)**, invierno 2024/25 1 180,6 (−0,6 %), invierno 2025/26 1 182,8 (−1,2 %). Aquí la mejora sí se mantiene en los pliegues sin usar, pero sigue siendo pequeña. Como esa ejecución quedaba como la última de `lgbm` en la clasificación, se repitió después `lgbm` con los valores por defecto (`20261023T193004Z-lgbm-validation`) para que el scorecard siga hablando de la v0.1. Ampliar el espacio exige enmendar el ADR 0015 (no se ha tocado); si se acepta, convendría repetir los tres cuantiles con él.
+
+**Adoptado (ADR 0033).** El Q50 de `config/lgbm_tuned.yaml` pasa a ser el del espacio ampliado (intento 115 de `lgbm-wide-q50`); Q10 y Q90 siguen con los estudios del espacio del ADR 0015. Validación de los 22 pliegues con esa configuración: `lgbm_tuned` RMSE 1 041,0 MW (−1,9 % frente a la v0.1; operador 876,6, +18,8 %), Winkler 3 443,9 y cobertura 70,6 % (`20261023T195003Z-lgbm_tuned-validation`); `lgbm_tuned_cqr` Winkler 3 387,0 y cobertura 79,4 % (`20261023T195834Z-lgbm_tuned_cqr-validation`). Las cifras de la tabla anterior con «optimizado» son las de la primera configuración (Q50 del espacio del ADR 0015).
+
+**Lectura.**
+
+- Con el espacio del ADR 0015 la optimización no acerca al operador: el error del Q50 pasa de +21,0 % a +20,3 % por encima del suyo. G1 (RMSE ≤ operador) no se alcanza con hiperparámetros; hay que buscarlo en variables, datos o modelo (#29 y siguientes).
+- El ajuste no es lo que limita el modelo: con 150 intentos la mediana de los intentos del Q50 coincide con la v0.1 y el mejor se aparta unos pocos MW. Por qué el error central no baja más no se ha investigado aquí.
+- La cobertura con CQR queda igual (79,4 %, en banda) y el Winkler apenas cambia.
+- Control de sobreajuste del ADR 0015 (periodo reservado > 10 % peor que en validación): pendiente, el periodo reservado no se ha evaluado.
+
+**Pruebas:** `tests/unit/test_tuning.py` (espacio del ADR, métricas, objetivo, poda, estudio SQLite con dos procesos, exportación y carga de parámetros, modelos registrados) y `tests/leakage/test_tuning_leakage.py` (el periodo reservado no está en ningún pliegue ni en el entrenamiento de la optimización ni en la parada temprana; también sobre la tabla real si existe).
+
 ## 9. Limitaciones y no verificado
 
 - **Persistencia:** el margen de 180 min sale de una sola semana de medidas de octubre de 2026 (~40 observaciones: retraso normal de 30 a 62 min y un atasco de hasta 166 min el 22 de octubre); en otras épocas o con incidencias más largas de ENTSO-E podría ser mayor. Además, la generación histórica de la plata es la **última revisión**, no la que estaba publicada en el momento del cierre, así que el valor «último conocido» puede ser algo mejor que el real. Con el mismo cuidado hay que leer su RMSE.
@@ -324,7 +423,8 @@ Las dos de «sin precio» reproducen bit a bit las de §8.4 (`20261023T163749Z-l
 - Las clasificaciones vigentes son las de §8.4 (tabla oro versión Delta 7; con la 8 de §8.5 las cifras del modelo por defecto son idénticas, 936 cierres, 22 pliegues). Las de §8 a §8.3 (410 cierres) quedan como historial. Cada vez que cambie el histórico, los pliegues cambian y hay que repetir las ejecuciones. El periodo reservado ahora tiene más días con realidad (la tabla llega al cierre del 2026-10-23) que cuando se evaluó por última vez la v0.1: si se evalúa, el número de filas no será el de §3.
 - El contador del holdout detecta mirar demasiado, no lo impide; las ejecuciones se pueden borrar a mano de `data/backtest/`, pero el registro `holdout_log.jsonl` es de solo añadir.
 - Pliegues de entrenamiento cortos al principio (182 días en el primero, 213 en el segundo): el error de oct y nov de 2024 es el de un modelo que solo ha visto primavera y verano, y esos dos meses no sirven para comparar con los siguientes. La media de todo el periodo los incluye (4 132 filas de las 64 224 en la racha ausente, 6,4 %).
-- **Racha ausente en los primeros 7 meses** (§8.4): la NaN nativa se ha comprobado con datos reales, pero el efecto de la racha sobre el error es menor que el ruido (±1 %), así que no se ha podido medir si ayuda; se repite tras Optuna.
+- **Racha ausente en los primeros 7 meses** (§8.4): la NaN nativa se ha comprobado con datos reales, pero el efecto de la racha sobre el error es menor que el ruido (±1 %), así que no se ha podido medir si ayuda; no se repitió tras Optuna (§8.6): sigue sin medirse.
+- **Optuna** (§8.6): los parámetros optimizados se eligieron con 11 de los 22 pliegues; la mejora en los otros 11 es nula y la comprobación independiente es el periodo reservado, aún sin evaluar. El estudio con espacio ampliado es exploratorio y solo cubre el Q50.
 - No se ha verificado el capítulo del informe en móvil; sí en escritorio claro con capturas de Chromium (el modo oscuro usa los mismos tokens de color).
 
 ## 10. Test de integración extremo a extremo

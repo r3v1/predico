@@ -1,6 +1,6 @@
 # ADR 0015 — Optimización de hiperparámetros con Optuna y control de sobreajuste
 
-- **Estado:** aceptada
+- **Estado:** aceptada; el espacio del Q50 lo enmienda el ADR 0033
 - **Fecha:** 2026-10-16
 
 ## Contexto
